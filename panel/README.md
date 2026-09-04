@@ -19,7 +19,12 @@ afterwards. The safety terms are always kept in the negative.
 Engine A knobs: prompt, noise scale (v2v strength), VACE scale, VACE on/off, per-visitor
 reset (cache), all live through Scope's session parameters.
 
-Presets (`presets/heroes.json`) apply to the engine shown on the kiosk. Ops: show mode
+**Engine switch**: one segmented control, B or A. The backend runs the whole sequence in
+the background and the page shows the step: to A — kiosk → `scope.html`, stop Engine B,
+ensure Scope, load LongLive (480x832, tiny VAE, VACE weights), wait for the WebRTC session;
+to B — kiosk → `output.html`, stop the Scope session and restart Scope idle (frees its
+VRAM), start Engine B, wait for its pipeline. Presets (`presets/heroes.json`) apply to the
+engine shown on the kiosk. Ops: show mode
 on/off, Engine B / A start/stop, "free GPU" (restart Scope, which keeps ~22 GB loaded after a
 session), kiosk restart, and switching the kiosk between the Engine B output page and Scope's
 own page. Unit: `booth-panel.service` (see the file for install lines).

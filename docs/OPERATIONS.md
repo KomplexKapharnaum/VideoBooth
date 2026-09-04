@@ -31,6 +31,11 @@ wrong resolution). Fix before doors, not after.
 
 ## During the show
 
+**Switching engines** is one control in the panel ("Engine on the visitor screen": B or A).
+It stops the other engine (GPU memory), loads the pipeline, points the screen at the right
+page and reports progress; B → A takes 1–3 min, A → B about 1 min, the screen is black
+meanwhile. Never click the raw start/stop buttons for a switch.
+
 | Situation | Do |
 |---|---|
 | New visitor, twin still shows the previous one's "memory" (Engine A drift) | engine reset / stream restart in the UI (Engine A); Engine B has no memory |
