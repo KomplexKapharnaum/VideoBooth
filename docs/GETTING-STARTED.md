@@ -64,7 +64,11 @@ When you are done: `tools/showmode.sh off` gives the GPU back to the other tenan
 - Prefer scripts from the repo over ad-hoc commands: if you had to type it twice, put it in
   `setup/` or `tools/` and commit.
 - Never `pkill -f <pattern>` inside an `ssh host '<cmd>'` argument — the pattern matches the
-  ssh shell itself and kills it. Feed scripts with `ssh kxkm-ai 'bash -s' <<'EOF' … EOF`.
+  ssh shell itself and kills it. Feed scripts with `ssh kxkm-ai 'bash -s' <<'EOF' … EOF`, and in
+  such scripts always run `ffmpeg -nostdin …`: otherwise ffmpeg eats the rest of the script from
+  stdin (the remaining lines never run).
+- The kiosk page holds `/dev/video0`; to record from the camera, `systemctl --user stop
+  booth-kiosk` first and start it again after.
 - Don't stop, edit or "clean up" services that are not the booth's. `tools/showmode.sh`
   is the only sanctioned way to pause them.
 - Changing the repo on your laptop → `git push` → on the box `git pull`. Don't edit files in
