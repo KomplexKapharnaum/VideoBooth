@@ -73,7 +73,7 @@ def try_http(*a, **k):
         return {'error': str(e)[:200]}
 
 
-def run(cmd, timeout=60):
+def run(cmd, timeout=120):
     r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
     return (r.stdout + r.stderr).strip()
 
@@ -271,13 +271,13 @@ def ops(action, arg=None):
         return run(f'tmux has-session -t booth-a 2>/dev/null && echo "already running" || (tmux new-session -d -s booth-a "{eng}/a-scope/run.sh 2>&1 | tee -a {STATE_DIR}/logs/engine_a_server.log" && echo started)')
     if action == 'engine_a_free':   # Scope keeps ~22 GB loaded after a session stop: restart it to free the GPU
         return run(f'tmux kill-session -t booth-a 2>/dev/null; sleep 2; tmux new-session -d -s booth-a "{eng}/a-scope/run.sh 2>&1 | tee -a {STATE_DIR}/logs/engine_a_server.log"; echo "scope restarted (VRAM freed)"')
-    if action == 'kiosk_restart': return run('systemctl --user restart booth-kiosk.service && echo restarted')
+    if action == 'kiosk_restart': return run('systemctl --user restart --no-block booth-kiosk.service && echo "restart queued"')
     if action in ('kiosk_b', 'kiosk_a', 'kiosk_url'):
         url = KIOSK_B if action == 'kiosk_b' else KIOSK_A if action == 'kiosk_a' else arg
         conf = os.path.join(ROOT, 'booth.conf'); txt = open(conf).read() if os.path.exists(conf) else ''
         txt = re.sub(r'^KIOSK_URL=.*\n?', '', txt, flags=re.M).rstrip('\n') + f'\nKIOSK_URL="{url}"\n'
         open(conf, 'w').write(txt); PREVIEW['ws'] = None
-        return run('systemctl --user restart booth-kiosk.service && echo "kiosk → ' + url + '"')
+        return run('systemctl --user restart --no-block booth-kiosk.service && echo "kiosk → ' + url + '"')
     return f'unknown action {action}'
 
 
