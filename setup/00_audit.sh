@@ -9,7 +9,7 @@ echo "## Machine audit — $(hostname) — $(date -Is)"
 h "Host"; uptime; grep -E "PRETTY|VERSION_ID" /etc/os-release; echo "kernel: $(uname -r)"; [ -f /var/run/reboot-required ] && echo "REBOOT REQUIRED"; e
 h "NVIDIA"; nvidia-smi --query-gpu=name,driver_version,memory.used,memory.total --format=csv 2>&1 | head -3
 echo "kernel module: $(cat /sys/module/nvidia/version 2>/dev/null || echo none loaded)"
-echo "userspace    : $(dpkg-query -W -f='${Version}' nvidia-kernel-common-580 2>/dev/null | cut -d- -f1)"
+echo "userspace    : $(dpkg-query -W -f='${db:Status-Abbrev}\t${Package} ${Version}\n' 'nvidia-utils-*' 2>/dev/null | awk '$1=="ii"{print $2, $3}' | head -1)"
 for k in $(ls /lib/modules); do v=$(modinfo -k "$k" nvidia 2>/dev/null | awk '/^version/{print $2}'); [ -n "$v" ] && echo "module on disk for $k: $v"; done
 echo "newest kernel (grub default 0): $(ls /boot/vmlinuz-* | sed 's#.*/vmlinuz-##' | sort -V | tail -1)"
 echo "secure boot: $(mokutil --sb-state 2>/dev/null | tr -d '\n')"; e

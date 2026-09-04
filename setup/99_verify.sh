@@ -4,7 +4,7 @@ set -uo pipefail
 . "$(dirname "$0")/env.sh"
 rc=0; ok() { echo "PASS  $1"; }; ko() { echo "FAIL  $1"; rc=1; }; warn() { echo "WARN  $1"; }
 if nvidia-smi >/dev/null 2>&1; then ok "nvidia-smi ($(nvidia-smi --query-gpu=driver_version --format=csv,noheader))"; else ko "nvidia-smi (driver mismatch? setup/01_driver_fix.sh + reboot)"; fi
-M=$(cat /sys/module/nvidia/version 2>/dev/null); U=$(dpkg-query -W -f='${Version}' nvidia-kernel-common-580 2>/dev/null | cut -d- -f1)
+M=$(cat /sys/module/nvidia/version 2>/dev/null); U=$(dpkg-query -W -f='${db:Status-Abbrev}\t${Version}\n' 'nvidia-utils-*' 2>/dev/null | awk '$1=="ii"{print $2}' | cut -d- -f1 | head -1)
 [ -n "$M" ] && [ "$M" = "$U" ] && ok "kernel module $M == userspace $U" || ko "kernel module '${M:-none}' vs userspace '$U'"
 [ -f /var/run/reboot-required ] && warn "reboot-required flag is set" || ok "no reboot pending"
 id -nG | grep -qw video && ok "user in video group" || ko "user not in video group (setup/02_root_prereqs.sh)"
