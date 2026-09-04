@@ -144,9 +144,13 @@ second GPU only if measured fps demands it.
   mode must leave the GPU empty; `nvidia-smi` is checked by `showmode status`.
 - **Brio at 1080p30**: MJPEG or YUY2 — the browser decodes; if CPU decode jitters,
   drop the capture to 720p (generation input is ≤ 576p anyway).
-- **Two browsers on one stream**: whether a technician page and the kiosk page can
-  share one session is engine-specific; if not, the technician uses OSC/API (Scope) or
-  the demo's controls over the kiosk page via DevTools (B). Verified in Phase 1.
+- **Two browsers on one stream** — RESOLVED for Engine B (2026-09-04, code read): the
+  demo's dials (`POST /api/params`, sliders in its UI) update the server-side pipeline
+  state, shared by every session; a frame only carries the image. So the kiosk page holds
+  the camera and the display, and the technician moves sliders on a laptop page **without
+  pressing Start Stream there** (a second stream would interleave frames in the one
+  pipeline and halve the fps). Scope: one session, controlled by its UI, OSC or
+  `/api/v1/session/parameters`.
 - **Reboot side effects**: Clément's Clown stack (docker restart policies), VoiceClone
   and gpu-swap (cron @reboot) come back by themselves; NFS hard mounts recovered on
   their own after the July outage.

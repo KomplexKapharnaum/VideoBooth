@@ -16,7 +16,10 @@ tools/cdp.py --screenshot /tmp/k.png                         # what the TV shows
 ```
 
 Then from the technician laptop: open the engine UI (`http://<box>:7860` for B, `:8000` for A),
-pick the preset, check the pose link with someone moving in front of the camera.
+pick the preset, check the pose link with someone moving in front of the camera. **Engine B:
+never press "Start Stream" on the laptop** — the kiosk page already streams; the sliders on
+the laptop act on the shared pipeline. A second stream would interleave with the kiosk's
+frames and halve the frame rate.
 
 Before doors: run one probe and keep the row —
 `.engines/StreamDiffusion/.venv/bin/python tools/engine_b_probe.py --source lavfi --seconds 60 --label "show-day check"`.

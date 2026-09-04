@@ -23,6 +23,12 @@ Aesthetic direction, in order of reliability: depth scale < 1.0 → fewer steps 
 depth stays robust, appearance mutates) → prompts, last. Generic "grotesque" prompts give
 cliché AI-horror; a house style will come from a LoRA later.
 
+All Engine B dials are **global**: the demo's sliders call `POST /api/params` on the server
+and change the one pipeline that serves every page, so a laptop page controls what the kiosk
+shows (without starting its own stream). Scope has one session: its UI, OSC, or
+`POST /api/v1/session/parameters` (`noise_scale`, `denoising_step_list`, `vace_enabled`,
+`vace_context_scale`, `reset_cache`, `output_sinks` for NDI).
+
 ## 2. Presets — `presets/heroes.json`
 
 One JSON, engine-independent. Fields: `name`, `prompt`, `negative` (must contain the safety
