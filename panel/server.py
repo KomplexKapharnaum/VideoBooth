@@ -438,6 +438,13 @@ def _wait(fn, timeout, every=2):
     return False
 
 
+def _kiosk_shows(fragment, timeout=40):
+    def on_page():
+        try: return fragment in (cdp.page().get('url') or '')
+        except Exception: return False
+    return _wait(on_page, timeout, 2)
+
+
 def switch_job(target):
     try:
         if target == 'OFF':
@@ -445,6 +452,7 @@ def switch_job(target):
             _sw('stopping Engine B'); ops('engine_b_stop')
             _sw('stopping Scope (session + server, frees the GPU)'); try_http(A + '/api/v1/session/stop', 'POST', {}, timeout=10); ops('engine_a_stop')
             _wait(lambda: 'error' in try_http(B + '/api/fps', timeout=2) and 'error' in try_http(A + '/health', timeout=2), 30, 2)
+            _kiosk_shows('blank.html')
             _sw('done — stopped, screen black, GPU free for the other tenants')
         elif target == 'A':
             _sw('kiosk → Scope page (waits for the pipeline)'); ops('kiosk_a')
@@ -460,7 +468,7 @@ def switch_job(target):
                     if s.get('status') == 'error' or s.get('error'): raise RuntimeError(f"pipeline load failed: {s.get('error')}")
                     return s.get('status') == 'loaded'
                 if not _wait(loaded, 900, 3): raise RuntimeError('pipeline load timed out')
-            _sw('waiting for the kiosk page to connect over WebRTC')
+            _sw('waiting for the kiosk page to connect over WebRTC'); _kiosk_shows('scope.html')
             def streaming():
                 s = try_http(A + '/api/v1/session/metrics', timeout=5); return bool(s.get('sessions'))
             _wait(streaming, 60, 2)
@@ -470,7 +478,7 @@ def switch_job(target):
             _sw('stopping the Scope session and freeing its VRAM (Scope restarts idle)'); try_http(A + '/api/v1/session/stop', 'POST', {}, timeout=10); ops('engine_a_free')
             _sw('starting Engine B'); ops('engine_b_start')
             if not _wait(lambda: 'error' not in try_http(B + '/api/settings', timeout=3), 180): raise RuntimeError('Engine B did not come up')
-            _sw('Engine B up — the kiosk page reconnects and the pipeline rebuilds (~30 s)')
+            _sw('Engine B up — the kiosk page reconnects and the pipeline rebuilds (~30 s)'); _kiosk_shows('output.html')
             _wait(lambda: (b_state().get('fps') or 0) > 1, 120, 3)
             _sw('done — kiosk on Engine B')
     except Exception as e:  # noqa: BLE001
