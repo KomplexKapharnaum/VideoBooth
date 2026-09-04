@@ -16,7 +16,7 @@ Serves panel/www and a JSON API that drives the engines, the kiosk and the box:
   POST /api/ops               {action: showmode_on|showmode_off|engine_b_start|engine_b_stop|engine_a_start|engine_a_stop|kiosk_restart|kiosk_b|kiosk_a}
 Runs as kxkm on kxkm-ai (systemd --user booth-panel.service), port PANEL_PORT (7870).
 """
-import base64, http.server, io, json, os, random, re, socketserver, subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request, uuid
+import base64, http.server, io, json, os, random, re, socket, socketserver, subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -39,6 +39,10 @@ STATE_DIR = ENV.get('BOOTH_STATE', os.path.join(ROOT, '.state'))
 SD_CONFIG = ENV.get('SD_CONFIG', os.path.join(ROOT, 'engines/b-streamdiffusion/booth_sd15_depth.yaml'))
 KIOSK_B = f"http://127.0.0.1:{ENV.get('KIOSK_HTTP_PORT', '7861')}/output.html?server={B}"
 KIOSK_A = f"http://127.0.0.1:{ENV.get('KIOSK_HTTP_PORT', '7861')}/scope.html?server={A}&pipeline=longlive&w=480&h=832"
+KIOSK_OFF = f"http://127.0.0.1:{ENV.get('KIOSK_HTTP_PORT', '7861')}/blank.html"
+PRESETS_REPO = os.path.join(ROOT, 'presets', 'heroes.json')          # the committed defaults
+PRESETS_FILE = os.path.join(STATE_DIR, 'presets.json')               # the technician's live copy (outside git)
+LOADED_PRESET = {'name': None, 'at': None}
 A_LOAD = {'height': 832, 'width': 480, 'vae_type': 'tae', 'base_seed': 42, 'vace_enabled': True, 'vace_context_scale': 0.85}
 SAFETY = 'nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation'
 LOG = []
@@ -198,6 +202,72 @@ def preview_jpeg(width=480):
             raise
 
 
+# ---------------------------------------------------------------- full-rate preview: relay the kiosk's own screencast as MJPEG
+class Screencast:
+    """One DevTools screencast of the kiosk page, fanned out to every /api/preview.mjpg client.
+    Runs only while a client is connected; the browser pushes a frame per repaint (JPEG,
+    downscaled by Chromium itself), so the cost stays small."""
+    def __init__(self):
+        self.lock = threading.Lock(); self.cond = threading.Condition(self.lock)
+        self.clients = 0; self.seq = 0; self.frame = None; self.thread = None; self.err = None
+
+    def _run(self):
+        try:
+            ws = cdp.WS(cdp.page()['webSocketDebuggerUrl']); ws.s.settimeout(5)
+            ws.call('Page.enable'); ws.call('Page.startScreencast', format='jpeg', quality=60, maxWidth=540, maxHeight=960, everyNthFrame=1)
+            idle = 0
+            while True:
+                with self.lock:
+                    if self.clients <= 0:
+                        idle += 1
+                        if idle > 3: break
+                    else:
+                        idle = 0
+                try:
+                    msg = json.loads(ws.recv())
+                except socket.timeout:
+                    continue
+                if msg.get('method') == 'Page.screencastFrame':
+                    p = msg['params']
+                    with self.cond:
+                        self.frame = base64.b64decode(p['data']); self.seq += 1; self.cond.notify_all()
+                    ws.n += 1; ws.send({'id': ws.n, 'method': 'Page.screencastFrameAck', 'params': {'sessionId': p['sessionId']}})
+            try: ws.call('Page.stopScreencast')
+            except Exception: pass
+        except Exception as e:  # noqa: BLE001
+            self.err = str(e)[:200]
+        finally:
+            with self.cond:
+                self.thread = None; self.cond.notify_all()
+
+    def attach(self):
+        with self.lock:
+            self.clients += 1
+            if self.thread is None:
+                self.err = None; self.thread = threading.Thread(target=self._run, daemon=True); self.thread.start()
+
+    def detach(self):
+        with self.lock:
+            self.clients = max(0, self.clients - 1)
+
+    def next_frame(self, last_seq, timeout=2.0):
+        with self.cond:
+            self.cond.wait_for(lambda: self.seq != last_seq or self.thread is None, timeout=timeout)
+            return (self.frame, self.seq) if self.seq != last_seq else (None, last_seq)
+
+
+SCREENCAST = Screencast()
+
+
+def box_info():
+    lan = run("ip -4 route get 1.1.1.1 2>/dev/null | grep -oP 'src \\K[0-9.]+'").split('\n')[0].strip()
+    ts = run('tailscale ip -4 2>/dev/null').split('\n')[0].strip()
+    views = [{'via': 'LAN', 'ip': lan, 'url': f'http://{lan}:{PORT}/view.html'} for _ in [0] if lan]
+    if ts: views.append({'via': 'tailscale', 'ip': ts, 'url': f'http://{ts}:{PORT}/view.html'})
+    return {'lan_ip': lan, 'tailscale_ip': ts, 'views': views, 'panel_port': PORT,
+            'presets_file': PRESETS_FILE, 'kiosk_urls': {'B': KIOSK_B, 'A': KIOSK_A, 'OFF': KIOSK_OFF}}
+
+
 # ---------------------------------------------------------------- status
 def status():
     b = b_state()
@@ -229,32 +299,83 @@ def status():
               'sessions': a_metrics.get('sessions') if isinstance(a_metrics, dict) else None},
         'gpu': dict(zip(('mem_used', 'mem_total', 'util', 'temp'), [x.strip() for x in gpu.split(',')])) if ',' in gpu else {'raw': gpu[:80]},
         'showmode': {'on': show, 'stopped': stopped},
-        'kiosk': {'active': kiosk_active, 'url': kiosk_url, 'ws': ws_state, 'engine': 'A' if kiosk_url and 'scope.html' in kiosk_url else ('B' if kiosk_url else None)},
+        'kiosk': {'active': kiosk_active, 'url': kiosk_url, 'ws': ws_state,
+                  'engine': 'A' if kiosk_url and 'scope.html' in kiosk_url else ('OFF' if kiosk_url and 'blank.html' in kiosk_url else ('B' if kiosk_url else None))},
+        'loaded_preset': LOADED_PRESET['name'],
         'tmux': tmux, 'log': LOG[-12:], 'switch': {k: SWITCH[k] for k in ('running', 'target', 'step', 'error')},
     }
 
 
 # ---------------------------------------------------------------- presets
+PRESET_LOCK = threading.Lock()
+
+
 def presets():
-    return json.load(open(os.path.join(ROOT, 'presets', 'heroes.json')))
+    """Live presets: $BOOTH_STATE/presets.json, seeded from the repo file on first use."""
+    if not os.path.exists(PRESETS_FILE):
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(PRESETS_REPO) as f, open(PRESETS_FILE, 'w') as g:
+            g.write(f.read())
+    return json.load(open(PRESETS_FILE))
+
+
+def save_preset(name, values, mode, notes=''):
+    """mode 'new' refuses an existing name; mode 'update' refuses a missing one — the UI asks
+    for a confirm before 'update'. Writes atomically, keeps a dated backup of the previous file."""
+    name = (name or '').strip()
+    if not name:
+        return {'error': 'a preset needs a name'}
+    with PRESET_LOCK:
+        d = presets(); items = d['presets']; idx = next((i for i, x in enumerate(items) if x['name'] == name), None)
+        if mode == 'new' and idx is not None:
+            return {'error': f'"{name}" exists — use Update, or pick another name'}
+        if mode == 'update' and idx is None:
+            return {'error': f'no preset "{name}" to update'}
+        neg = values.get('negative', '')
+        for term in SAFETY.split(', '):
+            if term not in neg:
+                neg = (neg + ', ' if neg else '') + term
+        entry = {'name': name, 'prompt': values.get('prompt', ''), 'negative': neg,
+                 'control_scale': float(values.get('control_scale', 0.9)), 'strength': float(values.get('strength', 0.5)),
+                 'steps': int(values.get('steps', 1)), 'seed_lock': bool(values.get('seed_lock', True)),
+                 'guidance_scale': float(values.get('guidance_scale', 1.0)), 'delta': float(values.get('delta', 0.7)),
+                 'seed': int(values.get('seed', 42)), 'noise_scale': float(values.get('noise_scale', 0.7)),
+                 'vace_scale': float(values.get('vace_scale', 0.85)),
+                 'notes': notes if notes is not None else (items[idx].get('notes', '') if idx is not None else ''),
+                 'updated': time.strftime('%Y-%m-%d %H:%M')}
+        if idx is None:
+            items.append(entry)
+        else:
+            entry['notes'] = notes if notes else items[idx].get('notes', ''); items[idx] = entry
+        bak = PRESETS_FILE + '.bak-' + time.strftime('%Y%m%d-%H%M%S')
+        try: os.replace(PRESETS_FILE, bak)
+        except FileNotFoundError: pass
+        tmp = PRESETS_FILE + '.tmp'
+        with open(tmp, 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, PRESETS_FILE)
+        baks = sorted(x for x in os.listdir(STATE_DIR) if x.startswith('presets.json.bak-'))
+        for old in baks[:-10]: os.remove(os.path.join(STATE_DIR, old))
+    LOADED_PRESET.update(name=name, at=time.time()); log(f'preset {mode}: {name}')
+    return {'saved': name, 'mode': mode, 'count': len(items)}
 
 
 def apply_preset(name, engine):
     p = next((x for x in presets()['presets'] if x['name'] == name), None)
     if not p:
         return {'error': f'no preset {name}'}
-    out = {}
+    out = {'preset': p}
     if engine == 'A':
         out['prompt'] = a_params({'prompts': [{'text': p['prompt'], 'weight': 1.0}]})
-        out['params'] = a_params({'vace_context_scale': float(p['control_scale']), 'noise_scale': float(p['strength'])})
+        out['params'] = a_params({'vace_context_scale': float(p.get('vace_scale', p['control_scale'])), 'noise_scale': float(p.get('noise_scale', p['strength']))})
     else:
         out['prompt'] = b_apply_prompt(p['prompt'])
-        out['params'] = b_apply_params({'control_scale': p['control_scale'], 'steps': p['steps'], 'strength': p['strength'], 'seed': 42})
+        out['params'] = b_apply_params({'control_scale': p['control_scale'], 'steps': p['steps'], 'strength': p['strength'],
+                                        'seed': p.get('seed', 42), 'guidance_scale': p.get('guidance_scale'), 'delta': p.get('delta')})
         FLICKER['on'] = not bool(p.get('seed_lock', True))
         st = b_state()
         if isinstance(st, dict) and st.get('negative_prompt') != p['negative']:
             out['negative'] = b_apply_negative(p['negative'])
-    log(f'preset {name} → engine {engine}')
+    LOADED_PRESET.update(name=name, at=time.time()); log(f'preset {name} → engine {engine}')
     return out
 
 
@@ -272,8 +393,8 @@ def ops(action, arg=None):
     if action == 'engine_a_free':   # Scope keeps ~22 GB loaded after a session stop: restart it to free the GPU
         return run(f'tmux kill-session -t booth-a 2>/dev/null; sleep 2; tmux new-session -d -s booth-a "{eng}/a-scope/run.sh 2>&1 | tee -a {STATE_DIR}/logs/engine_a_server.log"; echo "scope restarted (VRAM freed)"')
     if action == 'kiosk_restart': return run('systemctl --user restart --no-block booth-kiosk.service && echo "restart queued"')
-    if action in ('kiosk_b', 'kiosk_a', 'kiosk_url'):
-        url = KIOSK_B if action == 'kiosk_b' else KIOSK_A if action == 'kiosk_a' else arg
+    if action in ('kiosk_b', 'kiosk_a', 'kiosk_off', 'kiosk_url'):
+        url = {'kiosk_b': KIOSK_B, 'kiosk_a': KIOSK_A, 'kiosk_off': KIOSK_OFF}.get(action, arg)
         conf = os.path.join(ROOT, 'booth.conf'); txt = open(conf).read() if os.path.exists(conf) else ''
         txt = re.sub(r'^KIOSK_URL=.*\n?', '', txt, flags=re.M).rstrip('\n') + f'\nKIOSK_URL="{url}"\n'
         open(conf, 'w').write(txt); PREVIEW['ws'] = None
@@ -300,7 +421,13 @@ def _wait(fn, timeout, every=2):
 
 def switch_job(target):
     try:
-        if target == 'A':
+        if target == 'OFF':
+            _sw('visitor screen → black'); ops('kiosk_off'); FLICKER['on'] = False
+            _sw('stopping Engine B'); ops('engine_b_stop')
+            _sw('stopping Scope (session + server, frees the GPU)'); try_http(A + '/api/v1/session/stop', 'POST', {}, timeout=10); ops('engine_a_stop')
+            _wait(lambda: 'error' in try_http(B + '/api/fps', timeout=2) and 'error' in try_http(A + '/health', timeout=2), 30, 2)
+            _sw('done — stopped, screen black, GPU free for the other tenants')
+        elif target == 'A':
             _sw('kiosk → Scope page (waits for the pipeline)'); ops('kiosk_a')
             _sw('stopping Engine B (frees ~5 GB)'); ops('engine_b_stop')
             if not (isinstance(try_http(A + '/health', timeout=3), dict) and 'error' not in try_http(A + '/health', timeout=3)):
@@ -362,6 +489,26 @@ class H(http.server.SimpleHTTPRequestHandler):
             return self._json(presets())
         if u.path == '/api/switch/status':
             return self._json(SWITCH)
+        if u.path == '/api/info':
+            return self._json(box_info())
+        if u.path == '/api/preview.mjpg':
+            self.send_response(200); self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
+            self.send_header('Cache-Control', 'no-store'); self.end_headers()
+            SCREENCAST.attach(); seq = 0
+            try:
+                while True:
+                    frame, seq2 = SCREENCAST.next_frame(seq)
+                    if SCREENCAST.thread is None and frame is None:
+                        break
+                    if frame is None:
+                        continue
+                    seq = seq2
+                    self.wfile.write(b'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ' + str(len(frame)).encode() + b'\r\n\r\n' + frame + b'\r\n'); self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+            finally:
+                SCREENCAST.detach()
+            return
         if u.path == '/api/preview.jpg':
             try:
                 data = preview_jpeg(int(q.get('w', ['480'])[0]))
@@ -387,6 +534,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             elif p == '/api/a/reset':      r = a_params({'reset_cache': True}); log('A reset')
             elif p == '/api/ops':          r = ops(body['action'], body.get('arg')); log(f"ops {body['action']}: {str(r)[-80:]}")
             elif p == '/api/switch':       r = start_switch(body.get('engine', 'B').upper())
+            elif p == '/api/presets/save': r = save_preset(body.get('name'), body.get('values', {}), body.get('mode', 'new'), body.get('notes'))
             else:                          return self._json({'error': 'unknown endpoint'}, 404)
             self._json({'ok': True, 'result': r})
         except Exception as e:  # noqa: BLE001

@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>VideoBooth · view</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden} img{position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000} #hint{position:fixed;left:8px;bottom:6px;color:#666;font:12px system-ui;opacity:.8}</style></head>
+<body><img id="v" alt="visitor screen"><div id="hint">VideoBooth — live view of the visitor screen (relayed from the kiosk browser). Reload if it stalls.</div>
+<script>
+  // one MJPEG stream from the panel; on any error, reconnect every 2 s
+  const img = document.getElementById('v'); let t;
+  const start = () => { img.src = '/api/preview.mjpg?t=' + Date.now(); };
+  img.onerror = () => { clearTimeout(t); t = setTimeout(start, 2000); };
+  start(); document.body.onclick = () => document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+</script></body></html>

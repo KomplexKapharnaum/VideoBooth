@@ -42,13 +42,14 @@
   <section>
     <h2>Render preview — what the visitor sees</h2>
     <img id="preview" alt="preview">
-    <div class="row"><span class="hint" id="preview-hint">live screenshot of the kiosk browser, 2 fps</span></div>
+    <div class="row"><div class="seg" id="preview-mode"><button data-mode="2" class="on">2 fps</button><button data-mode="full">full rate</button></div><span class="hint" id="preview-hint">snapshots of the kiosk browser · full rate = the browser's own screencast, relayed</span></div>
+    <div class="row" style="align-items:flex-start"><div id="qr" style="background:#fff;padding:6px;border-radius:6px;line-height:0"></div><div style="flex:1;min-width:160px"><div class="hint">Live view for any device (no camera, no controls):</div><div id="view-links"></div></div></div>
     <h2 style="margin-top:14px">Engine on the visitor screen</h2>
     <div class="row">
-      <div class="seg" id="engine-switch"><button data-engine="B">B · StreamDiffusion</button><button data-engine="A">A · Scope LongLive</button></div>
+      <div class="seg" id="engine-switch"><button data-engine="OFF" title="stop both engines, screen black, GPU free">■ STOP</button><button data-engine="B">B · StreamDiffusion</button><button data-engine="A">A · Scope LongLive</button></div>
     </div>
     <div class="hint" id="switch-status">—</div>
-    <div class="hint">One button does everything: stops the other engine (GPU memory), loads the pipeline, points the visitor screen at the right page. B → A takes 1–3 min, A → B about 1 min. The screen goes black meanwhile.</div>
+    <div class="hint">One button does everything: stops the other engine (GPU memory), loads the pipeline, points the visitor screen at the right page. B → A takes 1–3 min, A → B about 1 min; STOP shuts both engines down and blanks the screen. The screen is black meanwhile.</div>
     <h2 style="margin-top:14px">Show mode</h2>
     <div class="row">
       <button data-op="showmode_on" id="show-on">Show mode ON</button>
@@ -78,8 +79,17 @@
     <div class="safety">always on: <span>nudity</span><span>naked</span><span>nsfw</span><span>sexual</span><span>explicit</span><span>gore</span><span>blood</span><span>wounds</span><span>mutilation</span></div>
     <textarea id="negative" placeholder="aesthetic negatives, e.g. ugly, deformed, bad anatomy, blurry (remove them for the freaky end)"></textarea>
     <div class="row"><button id="apply-negative">Apply negative</button><span class="hint" id="neg-hint">Engine B: rebuilds the pipeline, ~20 s black · Engine A: live</span></div>
-    <h2 style="margin-top:14px">Presets</h2>
+    <h2 style="margin-top:14px">Presets <span class="hint" id="loaded-preset" style="text-transform:none;letter-spacing:0"></span></h2>
     <div class="presets" id="presets"></div>
+    <div class="row" style="margin-top:10px;align-items:flex-start">
+      <input type="text" id="preset-name" placeholder="preset name" style="flex:1;min-width:140px;background:#0e1014;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit">
+      <input type="text" id="preset-notes" placeholder="notes (lighting, what it is for)" style="flex:2;min-width:160px;background:#0e1014;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit">
+    </div>
+    <div class="row">
+      <button id="preset-save-new">Save as NEW preset</button>
+      <button id="preset-update" disabled>Update loaded preset</button>
+      <span class="hint">saves what the boxes and knobs show now. Update asks for a confirm and only touches the preset last loaded.</span>
+    </div>
   </section>
 
   <section>
@@ -100,6 +110,7 @@
     </div>
   </section>
 </main>
+<script src="/vendor/qrcode.js"></script>
 <script>
 const $ = s => document.querySelector(s);
 const api = (p, body) => fetch(p, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)} : {}).then(r => r.json());
@@ -107,8 +118,23 @@ let engine = 'B', dirty = {prompt:false, negative:false}, filled = false, vaceOn
 const logEl = $('#log'); const say = m => { logEl.textContent = (new Date().toLocaleTimeString() + ' ' + m + '\n' + logEl.textContent).slice(0, 4000); };
 
 // ---- preview
-setInterval(() => { $('#preview').src = '/api/preview.jpg?w=520&t=' + Date.now(); }, 500);
+let previewMode = '2', previewTimer = null;
+function setPreviewMode(m) {
+  previewMode = m; document.querySelectorAll('#preview-mode button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  clearInterval(previewTimer); previewTimer = null;
+  if (m === 'full') { $('#preview').src = '/api/preview.mjpg?t=' + Date.now(); }
+  else { $('#preview').src = ''; previewTimer = setInterval(() => { $('#preview').src = '/api/preview.jpg?w=520&t=' + Date.now(); }, 500); }
+}
+document.querySelectorAll('#preview-mode button').forEach(b => b.onclick = () => setPreviewMode(b.dataset.mode));
+setPreviewMode('2');
 $('#preview').onload = e => { const i = e.target; i.classList.toggle('landscape', i.naturalWidth > i.naturalHeight); };
+$('#preview').onerror = () => { if (previewMode === 'full') setTimeout(() => setPreviewMode('full'), 2000); };
+
+// ---- live view links + QR (box IPs from the server)
+api('/api/info').then(i => {
+  const box = $('#view-links'); box.innerHTML = i.views.map(v => `<div><a href="${v.url}" target="_blank" style="color:var(--acc)">${v.url}</a> <span class="hint">(${v.via})</span></div>`).join('') || '<span class="hint">no network address found</span>';
+  if (i.views.length && window.qrcode) { const q = qrcode(0, 'M'); q.addData(i.views[0].url); q.make(); $('#qr').innerHTML = q.createSvgTag({cellSize: 3, margin: 1}); }
+});
 
 // ---- status
 async function poll() {
@@ -123,7 +149,10 @@ async function poll() {
     $('#c-show').className = 'chip ' + (s.showmode.on ? 'ok' : ''); $('#c-show').innerHTML = 'show mode <b>' + (s.showmode.on ? 'ON' : 'off') + '</b>';
     $('#show-on').classList.toggle('on', s.showmode.on); $('#show-off').classList.toggle('on', !s.showmode.on);
     const sw = s.switch || {}; document.querySelectorAll('#engine-switch button').forEach(b => { b.classList.toggle('on', !sw.running && b.dataset.engine === s.kiosk.engine); b.disabled = !!sw.running; });
-    $('#switch-status').textContent = sw.running ? `switching to ${sw.target}: ${sw.step}` : (sw.error ? 'last switch failed: ' + sw.error : (s.kiosk.engine ? `visitor screen on Engine ${s.kiosk.engine}` + (s.kiosk.ws === 1 ? ' — streaming' : ' — not streaming yet') : 'kiosk page unknown'));
+    $('#switch-status').textContent = sw.running ? `switching to ${sw.target}: ${sw.step}` : (sw.error ? 'last switch failed: ' + sw.error : (s.kiosk.engine === 'OFF' ? 'STOPPED — screen black, engines down' : s.kiosk.engine ? `visitor screen on Engine ${s.kiosk.engine}` + (s.kiosk.ws === 1 ? ' — streaming' : ' — not streaming yet') : 'kiosk page unknown'));
+    $('#c-engine').innerHTML = s.kiosk.engine === 'OFF' ? 'kiosk <b>STOPPED</b>' : 'kiosk on <b>Engine ' + (s.kiosk.engine || '?') + '</b>';
+    if (engine === 'OFF') engine = 'B';
+    loadedPreset = s.loaded_preset || loadedPreset; $('#loaded-preset').textContent = loadedPreset ? '· loaded: ' + loadedPreset : ''; $('#preset-update').disabled = !loadedPreset; $('#preset-update').textContent = loadedPreset ? `Update "${loadedPreset}"` : 'Update loaded preset';
     $('#c-time').textContent = s.time;
     $('#knobs-engine').textContent = 'Engine ' + engine; $('#knobs-b').classList.toggle('hide', engine !== 'B'); $('#knobs-a').classList.toggle('hide', engine !== 'A');
     $('#neg-hint').textContent = engine === 'B' ? 'Engine B: rebuilds the pipeline, ~20 s black' : 'Engine A: live';
@@ -149,7 +178,27 @@ $('#apply-prompt').onclick = applyPrompt; $('#apply-negative').onclick = applyNe
 $('#prompt').onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) applyPrompt(); };
 
 // ---- presets
-api('/api/presets').then(d => { const box = $('#presets'); d.presets.forEach(p => { const b = document.createElement('button'); b.innerHTML = `<b>${p.name}</b><small>${p.notes || ''}</small>`; b.onclick = async () => { b.disabled = true; const r = await api('/api/preset/apply', {name: p.name, engine}); b.disabled = false; say('preset ' + p.name + (r.ok ? ' ✓' : ' ✗ ' + r.error)); filled = false; }; box.appendChild(b); }); });
+let loadedPreset = null;
+function fillFromPreset(p) {
+  $('#prompt').value = p.prompt || ''; $('#negative').value = (p.negative || '').split(',').map(x => x.trim()).filter(x => x && !SAFETY.includes(x)).join(', ');
+  $('#prompt').classList.remove('dirty'); $('#negative').classList.remove('dirty');
+  setRange('control', p.control_scale ?? 0.9); setRange('strength', p.strength ?? 0.5); setSteps(p.steps ?? 1, false);
+  if (p.guidance_scale != null) setRange('guidance', p.guidance_scale); if (p.delta != null) setRange('delta', p.delta); if (p.seed != null) $('#k-seed').value = p.seed;
+  if (p.noise_scale != null) setRange('noise', p.noise_scale); if (p.vace_scale != null) setRange('vace', p.vace_scale);
+  $('#preset-name').value = p.name; $('#preset-notes').value = p.notes || '';
+}
+function loadPresets() {
+  api('/api/presets').then(d => { const box = $('#presets'); box.innerHTML = ''; d.presets.forEach(p => { const b = document.createElement('button'); b.innerHTML = `<b>${p.name}</b><small>${p.notes || ''}</small>`; b.onclick = async () => { b.disabled = true; const r = await api('/api/preset/apply', {name: p.name, engine}); b.disabled = false; say('preset ' + p.name + (r.ok ? ' ✓' : ' ✗ ' + r.error)); if (r.ok && r.result.preset) { loadedPreset = p.name; fillFromPreset(r.result.preset); } filled = true; }; box.appendChild(b); }); });
+}
+loadPresets();
+function currentValues() {
+  return {prompt: $('#prompt').value.trim(), negative: $('#negative').value.trim(), control_scale: +$('#k-control').value, steps, strength: +$('#k-strength').value,
+          guidance_scale: +$('#k-guidance').value, delta: +$('#k-delta').value, seed: +$('#k-seed').value, seed_lock: !flickerOn, noise_scale: +$('#k-noise').value, vace_scale: +$('#k-vace').value};
+}
+$('#preset-save-new').onclick = async () => { const name = $('#preset-name').value.trim(); if (!name) { say('give the preset a name first'); $('#preset-name').focus(); return; }
+  const r = await api('/api/presets/save', {name, mode: 'new', values: currentValues(), notes: $('#preset-notes').value.trim()}); say(r.ok && !r.result.error ? `saved new preset "${name}"` : '✗ ' + (r.error || r.result.error)); if (r.ok && !r.result.error) { loadedPreset = name; loadPresets(); } };
+$('#preset-update').onclick = async () => { if (!loadedPreset) return; if (!confirm(`Overwrite preset "${loadedPreset}" with the current prompt, negative and knobs?`)) return;
+  const r = await api('/api/presets/save', {name: loadedPreset, mode: 'update', values: currentValues(), notes: $('#preset-notes').value.trim()}); say(r.ok && !r.result.error ? `updated "${loadedPreset}"` : '✗ ' + (r.error || r.result.error)); if (r.ok && !r.result.error) loadPresets(); };
 
 // ---- knobs B
 let steps = 1; const debounce = (f, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => f(...a), ms); }; };
@@ -169,7 +218,7 @@ $('#vace-toggle').onclick = () => { vaceOn = !vaceOn; $('#vace-toggle').textCont
 $('#a-reset').onclick = async () => { const r = await api('/api/a/reset'); say('A reset ' + (r.ok ? '✓' : '✗')); };
 
 // ---- engine switch
-document.querySelectorAll('#engine-switch button').forEach(b => b.onclick = async () => { if (b.classList.contains('on')) return; const r = await api('/api/switch', {engine: b.dataset.engine}); say('switch → ' + b.dataset.engine + (r.ok ? ' started' : ' ✗ ' + r.error)); filled = false; poll(); });
+document.querySelectorAll('#engine-switch button').forEach(b => b.onclick = async () => { if (b.classList.contains('on')) return; if (b.dataset.engine === 'OFF' && !confirm('Stop both engines and blank the visitor screen?')) return; const r = await api('/api/switch', {engine: b.dataset.engine}); say('switch → ' + b.dataset.engine + (r.ok ? ' started' : ' ✗ ' + r.error)); filled = false; poll(); });
 
 // ---- ops
 document.querySelectorAll('[data-op]').forEach(b => b.onclick = async () => { b.disabled = true; say(b.dataset.op + ' …'); const r = await api('/api/ops', {action: b.dataset.op}); b.disabled = false; say(b.dataset.op + ': ' + (r.ok ? String(r.result).slice(-160) : '✗ ' + r.error)); filled = false; });
