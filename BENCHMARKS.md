@@ -119,6 +119,15 @@ tenants NOT stopped (whisper worker idle at 2.4 GB) — a show-mode run will fol
 |---|---|---|---|---|---|---|---|
 | 2026-09-04 14:02 | B baseline SD1.5-LCM 512x768 1step depthTRT 0.9 | lavfi 512x768 | **28.4 fps** | 35.2 / 65.2 / 112.3 ms | 14.9 ms | 0 > 250 ms (2557 frames) | **0.105 s** (min 0.031 / max 0.161 / sd 0.023, n=27) |
 
+| 2026-09-04 14:04 | B lavfi **paced at 30 fps** (`-re`), same config | lavfi 512x768 | **37.5 fps** (server 38.0) | 26.7 / 27.9 / 103.1 ms | 6.8 ms | 0 (937 frames, 25 s) | 0.128 s (min 0.081 / max 0.189 / sd 0.039, n=5) |
+| 2026-09-04 14:05 | B **real webcam** (aGent V5, 15 fps device), same config | v4l2 /dev/video0 512x768 | 36.9 fps (server 35.6) | 27.1 / 53.8 / 79.1 ms | 14.2 ms | 0 (1658 frames, 45 s) | n/a (no flash) |
+
+Output fps above the input rate (37 fps from a 30 fps or 15 fps source) means the demo
+re-renders the latest frame whenever no new one arrived — the per-frame cost is what the
+numbers show: **~27 ms per frame at 512x768, 1 step, depth ControlNet** on the 4090. The first
+run's 28 fps / 15 ms stdev was with the synthetic source running unpaced (ffmpeg flat out on the
+CPU next to the server); paced, the interval stdev falls to 7 ms.
+
 Reading: fps is 2.8× the ≥10 fps target and the latency spread is 23 ms — both far inside the
 brief's constraints. The p95 at 65 ms vs p50 at 30 ms hints at a bimodal frame time (TensorRT
 depth preprocessor on the default CUDA stream: the runtime warns about extra
