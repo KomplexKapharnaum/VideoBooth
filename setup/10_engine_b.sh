@@ -32,6 +32,12 @@ print("torch", torch.__version__, "cuda", torch.version.cuda, "gpu", torch.cuda.
 import tensorrt; print("tensorrt", tensorrt.__version__)
 PY
 
+# Booth patches on the demo (small, documented in engines/b-streamdiffusion/patches/). Idempotent.
+for p in "$BOOTH_HOME"/engines/b-streamdiffusion/patches/*.patch; do
+  [ -f "$p" ] || continue
+  if git apply --check --reverse "$p" >/dev/null 2>&1; then echo "patch already applied: $(basename "$p")";
+  else git apply "$p" && echo "patch applied: $(basename "$p")"; fi
+done
 cd demo/realtime-img2img
 # The demo's requirements.txt fights the package's own pins (2026-09-04 findings):
 #  - an UNPINNED xformers pulls torch 2.14 cu130 (replacing the cu128 torch above) and then

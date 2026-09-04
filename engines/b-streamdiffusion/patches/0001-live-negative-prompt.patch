@@ -1,0 +1,20 @@
+From: VideoBooth <videobooth@kxkm.net>
+Subject: [PATCH] realtime-img2img: accept negative_prompt in POST /api/params (live, no rebuild)
+
+The library's update_stream_params() already takes negative_prompt (re-encodes the prompt
+embeddings), and AppState.update_parameter('negative_prompt') exists, but no route exposed it:
+the only way to change the negative was a config re-upload, which destroys and rebuilds the
+pipeline (~20 s black). Three lines: forward the key like the others.
+---
+ demo/realtime-img2img/routes/parameters.py | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/demo/realtime-img2img/routes/parameters.py b/demo/realtime-img2img/routes/parameters.py
+--- a/demo/realtime-img2img/routes/parameters.py
++++ b/demo/realtime-img2img/routes/parameters.py
+@@ -57,6 +57,8 @@ async def update_params(request: Request, app_instance=Depends(get_app_instance)
+             params["seed"] = int(data["seed"])
++        if "negative_prompt" in data:
++            params["negative_prompt"] = str(data["negative_prompt"])
+         if "t_index_list" in data:
+             t_index_list = data["t_index_list"]

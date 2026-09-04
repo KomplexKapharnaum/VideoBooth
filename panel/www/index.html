@@ -130,6 +130,9 @@ document.querySelectorAll('#preview-mode button').forEach(b => b.onclick = () =>
 setPreviewMode('2');
 $('#preview').onload = e => { const i = e.target; i.classList.toggle('landscape', i.naturalWidth > i.naturalHeight); };
 $('#preview').onerror = () => { if (previewMode === 'full') setTimeout(() => setPreviewMode('full'), 2000); };
+// full-rate watchdog: if the stream stops delivering (kiosk restarted), reopen it
+let lastPaint = Date.now(); $('#preview').addEventListener('load', () => { lastPaint = Date.now(); });
+setInterval(() => { if (previewMode === 'full' && Date.now() - lastPaint > 6000) { lastPaint = Date.now(); setPreviewMode('full'); } }, 3000);
 
 // ---- live view links + QR (box IPs from the server)
 api('/api/info').then(i => {

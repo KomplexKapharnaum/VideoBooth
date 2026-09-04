@@ -83,7 +83,7 @@ def run(cmd, timeout=120):
 
 
 # ---------------------------------------------------------------- engine B helpers
-B_LIVE = {'prompt': None, 'params': {}, 'control_scale': None}   # last values applied live (re-applied after a rebuild)
+B_LIVE = {'prompt': None, 'params': {}, 'control_scale': None, 'negative': None}   # last values applied live (re-applied after a rebuild)
 
 
 def b_state():
@@ -124,13 +124,20 @@ def b_apply_prompt(prompt):
 
 
 def b_apply_negative(negative):
-    """No live route for the negative prompt in the demo: rewrite it in the config and re-upload
-    (the pipeline is rebuilt on the kiosk's next stream request, TensorRT engines stay cached),
+    """Live when the demo carries the booth patch (POST /api/params negative_prompt — the library
+    re-encodes the prompt embeddings, no rebuild). Fallback for an unpatched demo: rewrite the
+    config and re-upload it (pipeline rebuilt on the kiosk's next stream request, ~20 s black),
     then re-apply the values the technician set live since the last upload."""
     neg = negative.strip()
     for term in SAFETY.split(', '):
         if term not in neg:
             neg = (neg + ', ' if neg else '') + term
+    r = try_http(B + '/api/params', 'POST', {'negative_prompt': neg}, timeout=20)
+    st = b_state()
+    if isinstance(st, dict) and st.get('negative_prompt') == neg:
+        B_LIVE['negative'] = neg
+        return {'live': True, 'negative': neg}
+    log('negative: live route not available (unpatched demo?) — falling back to a config re-upload')
     txt = open(SD_CONFIG).read()
     txt2 = re.sub(r'^negative_prompt:.*$', 'negative_prompt: ' + json.dumps(neg), txt, count=1, flags=re.M)
     if B_LIVE['prompt']:
@@ -240,9 +247,10 @@ class Screencast:
             with self.cond:
                 self.thread = None; self.cond.notify_all()
 
-    def attach(self):
+    def attach(self, new_client=True):
         with self.lock:
-            self.clients += 1
+            if new_client:
+                self.clients += 1
             if self.thread is None:
                 self.err = None; self.thread = threading.Thread(target=self._run, daemon=True); self.thread.start()
 
@@ -521,15 +529,23 @@ class H(http.server.SimpleHTTPRequestHandler):
         if u.path == '/api/preview.mjpg':
             self.send_response(200); self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
             self.send_header('Cache-Control', 'no-store'); self.end_headers()
-            SCREENCAST.attach(); seq = 0
+            # Stays open until the CLIENT leaves: if the screencast dies (kiosk restarted during an
+            # engine switch), re-attach every second; while nothing repaints, re-send the last frame
+            # every 2 s so the browser keeps the stream alive.
+            SCREENCAST.attach(); seq = 0; last_sent = time.time(); last_frame = None
             try:
                 while True:
+                    if SCREENCAST.thread is None:
+                        time.sleep(1.0); SCREENCAST.attach(new_client=False)
                     frame, seq2 = SCREENCAST.next_frame(seq)
-                    if SCREENCAST.thread is None and frame is None:
-                        break
                     if frame is None:
-                        continue
-                    seq = seq2
+                        if last_frame is not None and time.time() - last_sent > 2.0:
+                            frame = last_frame
+                        else:
+                            continue
+                    else:
+                        seq = seq2; last_frame = frame
+                    last_sent = time.time()
                     self.wfile.write(b'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ' + str(len(frame)).encode() + b'\r\n\r\n' + frame + b'\r\n'); self.wfile.flush()
             except (BrokenPipeError, ConnectionResetError, OSError):
                 pass
