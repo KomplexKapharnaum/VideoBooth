@@ -97,7 +97,7 @@
     <h2>Knobs · <span id="knobs-engine">Engine B</span></h2>
     <div id="knobs-b">
       <div class="knob"><label>Depth control scale <b id="v-control">0.9</b></label><input type="range" id="k-control" min="0" max="1.5" step="0.05" value="0.9"><div class="hint">1.0 = pose locked · below = anatomy free to go wrong</div></div>
-      <div class="knob"><label>Steps</label><div class="seg" id="k-steps"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button></div></div>
+      <div class="knob"><label>Steps <b class="hint" style="font-weight:normal">changing the count rebuilds the pipeline (~20 s black)</b></label><div class="seg" id="k-steps"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button></div></div>
       <div class="knob"><label>Strength (how far from the camera) <b id="v-strength">0.5</b></label><input type="range" id="k-strength" min="0.1" max="0.9" step="0.05" value="0.5"><div class="hint">t_index_list = <span id="v-tindex">[24]</span></div></div>
       <div class="knob"><label>Guidance <b id="v-guidance">1.0</b></label><input type="range" id="k-guidance" min="0.5" max="2" step="0.05" value="1.0"></div>
       <div class="knob"><label>Delta (temporal residual noise) <b id="v-delta">0.7</b></label><input type="range" id="k-delta" min="0" max="1" step="0.05" value="0.7"></div>
@@ -192,7 +192,7 @@ function fillFromPreset(p) {
   $('#preset-name').value = p.name; $('#preset-notes').value = p.notes || '';
 }
 function loadPresets() {
-  api('/api/presets').then(d => { const box = $('#presets'); box.innerHTML = ''; d.presets.forEach(p => { const b = document.createElement('button'); b.innerHTML = `<b>${p.name}</b><small>${p.notes || ''}</small>`; b.onclick = async () => { b.disabled = true; const r = await api('/api/preset/apply', {name: p.name, engine}); b.disabled = false; say('preset ' + p.name + (r.ok ? ' ✓' : ' ✗ ' + r.error)); if (r.ok && r.result.preset) { loadedPreset = p.name; fillFromPreset(r.result.preset); } filled = true; }; box.appendChild(b); }); });
+  api('/api/presets').then(d => { const box = $('#presets'); box.innerHTML = ''; d.presets.forEach(p => { const b = document.createElement('button'); b.innerHTML = `<b>${p.name}</b><small>${p.notes || ''}</small>`; b.onclick = async () => { b.disabled = true; const r = await api('/api/preset/apply', {name: p.name, engine}); b.disabled = false; const reb = r.ok && r.result.params && r.result.params.params && r.result.params.params.rebuild; say('preset ' + p.name + (r.ok ? (reb ? ' ✓ (step count differs → rebuild, ~20 s black)' : ' ✓') : ' ✗ ' + r.error)); if (r.ok && r.result.preset) { loadedPreset = p.name; fillFromPreset(r.result.preset); } filled = true; }; box.appendChild(b); }); });
 }
 loadPresets();
 function currentValues() {
@@ -211,7 +211,7 @@ let steps = 1; const debounce = (f, ms) => { let t; return (...a) => { clearTime
 function setRange(id, v) { $('#k-' + id).value = v; $('#v-' + id).textContent = (+v).toFixed(2); }
 function setSteps(n, send = true) { steps = n; document.querySelectorAll('#k-steps button').forEach(b => b.classList.toggle('on', +b.dataset.v === n)); if (send) sendB({steps: n, strength: +$('#k-strength').value}); }
 document.querySelectorAll('#k-steps button').forEach(b => b.onclick = () => setSteps(+b.dataset.v));
-const sendB = debounce(async body => { const r = await api('/api/b/params', body); if (r.ok && r.result.params && r.result.params.updated_params && r.result.params.updated_params.t_index_list) $('#v-tindex').textContent = JSON.stringify(r.result.params.updated_params.t_index_list); if (!r.ok) say('params ✗ ' + r.error); }, 180);
+const sendB = debounce(async body => { const r = await api('/api/b/params', body); const pr = r.ok && r.result.params; if (pr && pr.updated_params && pr.updated_params.t_index_list) $('#v-tindex').textContent = JSON.stringify(pr.updated_params.t_index_list); if (pr && pr.rebuild) { $('#v-tindex').textContent = JSON.stringify(pr.t_index_list) + ' (rebuilding…)'; say('step count changed → pipeline rebuild, ~20 s black'); } if (!r.ok) say('params ✗ ' + r.error); }, 180);
 for (const id of ['control', 'strength', 'guidance', 'delta']) { $('#k-' + id).oninput = e => { $('#v-' + id).textContent = (+e.target.value).toFixed(2); const v = +e.target.value; sendB(id === 'control' ? {control_scale: v} : id === 'strength' ? {steps, strength: v} : id === 'guidance' ? {guidance_scale: v} : {delta: v}); }; }
 $('#seed-apply').onclick = () => sendB({seed: +$('#k-seed').value}); $('#seed-random').onclick = () => { $('#k-seed').value = Math.floor(Math.random() * 2e9); sendB({seed: +$('#k-seed').value}); };
 $('#flicker').onclick = async () => { const r = await api('/api/b/flicker', {on: !flickerOn, ms: 150}); flickerOn = r.result.on; $('#flicker').textContent = 'Flicker ' + (flickerOn ? 'ON' : 'OFF'); $('#flicker').classList.toggle('on', flickerOn); };

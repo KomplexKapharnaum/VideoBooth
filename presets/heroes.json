@@ -5,7 +5,7 @@
     "negative": "negative prompt — the safety terms below are ALWAYS present (brief rule 2.7); aesthetic terms are optional",
     "control_scale": "depth control scale, 0.0–1.0 (below 1.0 = anatomy may go wrong while the pose stays)",
     "strength": "img2img / v2v strength (denoise), 0.0–1.0",
-    "steps": "denoising steps, 1–4",
+    "steps": "denoising steps, 1–4 — NOT live on Engine B (TensorRT + ControlNet): a different count rebuilds the pipeline (~20 s); keep 1 for shows",
     "seed_lock": "true = fixed seed (calm), false = per-frame seed (flicker texture, Engine B)",
     "notes": "what this preset is for, lighting hints"
   },
@@ -18,9 +18,9 @@
       "negative": "nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation, ugly, deformed, bad anatomy, extra limbs, blurry, low quality, watermark, text",
       "control_scale": 1.0,
       "strength": 0.55,
-      "steps": 2,
+      "steps": 1,
       "seed_lock": true,
-      "notes": "Clean end of the dials. Reference preset for pose-legibility checks. Neutral front light."
+      "notes": "Clean end of the dials (1 step: more steps rebuild the pipeline on B). Reference preset for pose-legibility checks. Neutral front light."
     },
     {
       "name": "Crimson Colossus",
@@ -58,9 +58,9 @@
       "negative": "nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation, ugly, deformed, bad anatomy, blurry, watermark, text",
       "control_scale": 1.0,
       "strength": 0.5,
-      "steps": 3,
+      "steps": 1,
       "seed_lock": true,
-      "notes": "Family-friendly poster look; slowest preset, 3 steps (Engine B) or interpolation on (Engine A)."
+      "notes": "Family-friendly poster look; slowest preset, interpolation on (Engine A); more steps = rebuild on B."
     }
   ]
 }
