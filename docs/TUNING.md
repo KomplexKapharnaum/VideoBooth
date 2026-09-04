@@ -41,11 +41,11 @@ terms), `control_scale`, `strength`, `steps`, `seed_lock`, `notes`. Five starter
 "Chrome Sentinel (clean)" is the reference for pose-legibility checks, "Neon Wraith" the
 freaky end.
 
-Adding a hero: copy a block, keep `_safety_negative` in `negative`, pick `control_scale`
-0.75–1.0, `strength` 0.5–0.7, `steps` 1–3, then **try it on a moving person** and write one
-line of `notes` (what it is for, which lighting). Until the engine UI loads presets directly
-(Phase 2 work), presets are applied by hand in the UI: prompt, negative, ControlNet strength,
-steps, seed.
+Adding a hero from the panel: set the prompt, negative and knobs, try it on a moving person,
+type a name and a note, "Save as NEW". Refine a loaded one and "Update" (confirm). The live
+file is `.state/presets.json` on the box; `presets/heroes.json` in the repo is the committed
+set of defaults — copy the live file back into the repo and commit when a set is worth
+keeping for the next install. Keep `control_scale` 0.75–1.0, `strength` 0.5–0.7, `steps` 1–3.
 
 ## 3. Engine B config — `engines/b-streamdiffusion/booth_sd15_depth.yaml`
 

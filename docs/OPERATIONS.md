@@ -31,7 +31,9 @@ wrong resolution). Fix before doors, not after.
 
 ## During the show
 
-**Switching engines** is one control in the panel ("Engine on the visitor screen": B or A).
+**Switching engines** is one control in the panel ("Engine on the visitor screen": STOP, B or A;
+STOP = both engines down, screen black). A phone or laptop can watch the visitor screen at
+`http://<box>:7870/view.html` (QR code in the panel).
 It stops the other engine (GPU memory), loads the pipeline, points the screen at the right
 page and reports progress; B → A takes 1–3 min, A → B about 1 min, the screen is black
 meanwhile. Never click the raw start/stop buttons for a switch.
