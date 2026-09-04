@@ -19,8 +19,10 @@ PORT = int(os.environ.get('CDP_PORT', '9222'))
 
 
 def page():
+    """The kiosk page: the first http(s) page target (never chrome:// or extension pages)."""
     tabs = json.load(urllib.request.urlopen(f'http://127.0.0.1:{PORT}/json', timeout=3))
-    return next(t for t in tabs if t.get('type') == 'page')
+    pages = [t for t in tabs if t.get('type') == 'page']
+    return next((t for t in pages if t.get('url', '').startswith('http')), pages[0])
 
 
 class WS:
