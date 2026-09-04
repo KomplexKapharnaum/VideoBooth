@@ -47,7 +47,7 @@ def log(msg):
     LOG.append(f"{time.strftime('%H:%M:%S')} {msg}"); del LOG[:-60]; print(msg, flush=True)
 
 
-def http(url, method='GET', body=None, timeout=10, form=None):
+def call(url, method='GET', body=None, timeout=10, form=None):
     data, headers = None, {}
     if form is not None:                       # multipart file upload (config re-upload)
         bnd = uuid.uuid4().hex
@@ -67,7 +67,7 @@ def http(url, method='GET', body=None, timeout=10, form=None):
 
 def try_http(*a, **k):
     try:
-        return http(*a, **k)
+        return call(*a, **k)
     except Exception as e:  # noqa: BLE001
         return {'error': str(e)[:200]}
 
