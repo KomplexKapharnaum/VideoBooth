@@ -122,6 +122,13 @@ tenants NOT stopped (whisper worker idle at 2.4 GB) — a show-mode run will fol
 | 2026-09-04 14:04 | B lavfi **paced at 30 fps** (`-re`), same config | lavfi 512x768 | **37.5 fps** (server 38.0) | 26.7 / 27.9 / 103.1 ms | 6.8 ms | 0 (937 frames, 25 s) | 0.128 s (min 0.081 / max 0.189 / sd 0.039, n=5) |
 | 2026-09-04 14:05 | B **real webcam** (aGent V5, 15 fps device), same config | v4l2 /dev/video0 512x768 | 36.9 fps (server 35.6) | 27.1 / 53.8 / 79.1 ms | 14.2 ms | 0 (1658 frames, 45 s) | n/a (no flash) |
 
+| 2026-09-04 14:16 | B **browser path**: kiosk Chromium (snap, GPU-accelerated) is camera source + display, same config | webcam 15 fps via getUserMedia 1024² → websocket | **26 fps** shown by the page = server `/api/fps` 25.8 | compositor repaints 56.9/s, 17.6 / 33.5 / 118 ms — conflates the input preview `<video>` and the output `<img>`, so NOT the output frame time | 10.9 ms | 0 | not measured (needs an output-only page) |
+
+The browser loop costs ~10 fps vs the engine probe (26 vs 37): the page encodes 1024² JPEGs
+per frame and pulls MJPEG back, single-threaded JS. Still 2.6× the target. An output-only
+kiosk page (planned) is what makes the presented output frame time measurable
+(`fps_probe.py --screencast` on a page where only the output moves).
+
 Output fps above the input rate (37 fps from a 30 fps or 15 fps source) means the demo
 re-renders the latest frame whenever no new one arrived — the per-frame cost is what the
 numbers show: **~27 ms per frame at 512x768, 1 step, depth ControlNet** on the 4090. The first
