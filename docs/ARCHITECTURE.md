@@ -92,6 +92,8 @@ back over WebRTC — with its own UI, pipelines and control (OSC + HTTP API, NDI
 | Kiosk | `systemctl --user status booth-kiosk`, Chromium DevTools **9222** (localhost); visitor page served on **7861** |
 | Technician panel | `systemctl --user status booth-panel`, `panel/server.py`, port **7870** (LAN, no auth) |
 | Config | `setup/env.sh` (paths, ports, defaults) overridden by `booth.conf` (gitignored, per machine) |
+| Presets (live) | `/ai/VideoBooth/.state/presets.json` — seeded from `presets/heroes.json`, edited from the panel, dated backups beside it |
+| Demo patches | `engines/b-streamdiffusion/patches/` — applied to the StreamDiffusion checkout by the installer (live negative prompt, no double rebuild) |
 
 Pinned versions (2026-09-04): Python 3.10.20 · torch 2.8.0+cu128 · TensorRT 10.12.0.36 ·
 diffusers 0.35.0 · StreamDiffusion fork `4c90d9e` · Node 22 / npm 10 · Chromium 152 (snap,
@@ -129,7 +131,14 @@ overwritten.
 - **Public booth, families present**: the safety negatives in every preset are not optional
   (brief rule 2.7). No visitor-facing UI, no attribute detection of any kind.
 
-## 8. Decisions and open questions
+## 8. Engine B: what is live and what rebuilds
+
+Live (no interruption): prompt, negative prompt (booth patch), strength (timestep values),
+depth ControlNet scale, guidance, delta, seed, seed flicker. **Rebuild** (~20 s black, TensorRT
+engines stay cached): the number of steps, the resolution, the model. The panel routes each
+change to the right path and says so.
+
+## 9. Decisions and open questions
 
 Decisions, deviations from the original brief and the risk list live in
 [../ROADMAP.md](../ROADMAP.md). The engine choice will be recorded in

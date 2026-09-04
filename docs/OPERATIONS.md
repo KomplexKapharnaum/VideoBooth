@@ -46,6 +46,7 @@ meanwhile. Never click the raw start/stop buttons for a switch.
 | Camera lost (USB hiccup) | `tools/camera_check.sh`; replug; restart the kiosk (it re-opens the camera) |
 | Latency wandering, fps down | `tools/showmode.sh status` → something else took the GPU → stop it; check `nvidia-smi` temperature/throttle |
 | Look too clean / too freaky | the dials, see [TUNING.md](TUNING.md); never restart for a style change |
+| Screen goes brown then black after a preset (Engine B) | the preset changed the step count: the panel now rebuilds for it (~20 s) — wait; keep presets at one step for shows |
 
 Logs: `.state/logs/engine_b_server.log`, `.state/logs/kiosk.log`, `journalctl --user -u booth-kiosk`.
 

@@ -19,10 +19,20 @@ they differ (see "Deviations").
 
 ---
 
-## Status (2026-09-04)
+## Status (2026-09-04, end of day 1)
 
-- **Repo created**, brief reviewed, scripts and configs drafted — **nothing run on the
-  GPU yet**.
+- **Box ready**: driver repaired (595-open, signed modules), root prereqs done, GDM autologin,
+  Chromium kiosk unit, show mode, technician panel (`panel/`, :7870).
+- **Engine B measured**: 37 fps engine-side / 33 fps presented on the kiosk, 27 ms flat, 0
+  stalls, 0.13 s engine-side latency; live prompt, negative (booth patch), strength, depth
+  scale, seed/flicker; **step count not live** (rebuild ~20 s) — presets are one step.
+- **Engine A measured**: LongLive 480x832 = 7 fps bare / 5.7 fps VACE in ~12-frame bursts
+  every 1.6–1.9 s → constant latency impossible at this size; `DECISION.md` preliminary: B
+  leads on the two first criteria; look on real people (Brio) decides.
+- **Open**: Brio (week of 09-07), real-people A/B under three lightings, TV attached and
+  portrait, presets tuned, operator README final, show-day rehearsal.
+- History of the day (blockers found and fixed) is in the hub log; the state below is kept
+  for reference.
 - **Blocker 0 — driver (root cause found 2026-09-04 pm)**: Ubuntu's signed NVIDIA
   module packages link their `.ko` at install time on this box (`latelink=true`) and
   need `linux-headers-<kver>`; the headers were never installed for the newest OEM
@@ -91,18 +101,22 @@ they differ (see "Deviations").
 - [ ] `setup/00_audit.sh` report filed in BENCHMARKS.md (header block).
 
 ### Phase 1 — engines and baselines (this week with the USB webcam, redo with the Brio)
-- [ ] `tools/camera_check.sh` (formats, real fps).
-- [ ] Engine B: `setup/10_engine_b.sh`, TensorRT engines 512×768, baseline run,
-      `tools/fps_probe.py` 2 min moving person → BENCHMARKS.md.
+- [x] `tools/camera_check.sh` on the USB webcam (15 fps device) — redo with the Brio.
+- [x] Engine B: installed, TensorRT engines 512×768, baselines → BENCHMARKS.md (engine probe,
+      browser path, kiosk output-only page).
 - [x] Engine A: `setup/20_engine_a.sh`, LongLive bare + VACE (input video as control)
       → BENCHMARKS.md 2026-09-04: 7 / 5.7 fps in 12-frame bursts every 1.6–1.9 s. Left:
       SDV2 bare, the depth-node graph, fp8.
-- [ ] Glass-to-glass for both (`tools/LATENCY.md`).
-- [ ] Kiosk unit live on the desk monitor, portrait.
+- [ ] Glass-to-glass for both (`tools/LATENCY.md`) — needs the real TV and a phone.
+- [x] Kiosk unit live on the desk monitor (portrait when the TV is attached); output-only
+      visitor pages for B (`output.html`) and A (`scope.html`); technician panel with
+      one-button engine switch, live view page, preset management.
 
 ### Phase 2 — decision (week of 2026-09-07, Brio + real people + 3 lightings)
 - [ ] A/B session → `DECISION.md`. One engine from here.
-- [ ] Dials verified live; `presets/heroes.json` 5 heroes tuned.
+- [x] Dials verified live in the panel (B: prompt, negative, strength, depth scale, guidance,
+      delta, seed, flicker — step count rebuilds; A: prompt, noise, VACE, reset).
+- [ ] `presets/heroes.json` 5 heroes tuned on real people (Brio).
 - [ ] Operator README.
 
 ### Phase 3 — show hardening (before the festival)
@@ -142,7 +156,13 @@ second GPU only if measured fps demands it.
 - **Scope is alpha**, weekly changes; pin the commit that passes the bench in
   `setup/env.sh` (`SCOPE_REF`) and never update during show week.
 - **VRAM**: LongLive ~20 GB + depth preprocessor ~1 GB + Chromium on the same GPU. Show
-  mode must leave the GPU empty; `nvidia-smi` is checked by `showmode status`.
+  mode must leave the GPU empty; `nvidia-smi` is checked by `showmode status`. The panel's
+  engine switch stops the other engine first; Scope keeps its VRAM after a session stop
+  (the switch restarts it idle).
+- **Engine B step count** is not a live dial (TensorRT + ControlNet batch): the panel rebuilds
+  the pipeline for it (~20 s black). Keep one step during a show.
+- **Shared-box services**: never start engines from inside a service's cgroup (the tmux
+  server must live in its own scope — a panel restart once killed VoiceClone).
 - **Brio at 1080p30**: MJPEG or YUY2 — the browser decodes; if CPU decode jitters,
   drop the capture to 720p (generation input is ≤ 576p anyway).
 - **Two browsers on one stream** — RESOLVED for Engine B (2026-09-04, code read): the

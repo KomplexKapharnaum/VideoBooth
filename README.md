@@ -14,9 +14,11 @@ Brio 4K ─USB─▶ kiosk Chromium (camera + display, --kiosk, portrait 55")
         technician: the engine's web UI from a laptop on the LAN — dials, presets, reset
 ```
 
-> **Status (2026-09-04):** machine prepared (driver 595 open, Chromium, autologin), Engine B
-> installed with its TensorRT depth preprocessor, first baseline being measured. Engine A not
-> installed yet. Camera arrives the week of 7 September. Details: [ROADMAP.md](ROADMAP.md).
+> **Status (2026-09-04, end of day 1):** machine ready (driver 595 open, Chromium kiosk with
+> autologin), both engines installed and measured — B: 33 fps on the visitor screen, 27 ms
+> flat; A: 7 fps in 12-frame bursts — technician panel live at `:7870` (STOP/B/A, presets,
+> live view). Camera (Brio 4K) arrives the week of 7 September; real-people A/B then.
+> Details: [ROADMAP.md](ROADMAP.md), numbers: [BENCHMARKS.md](BENCHMARKS.md).
 
 ## Start here
 

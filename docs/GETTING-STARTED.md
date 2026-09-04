@@ -42,9 +42,10 @@ tmux new -s booth-b engines/b-streamdiffusion/run.sh      # first start: builds 
 # detach with Ctrl-b d ; watch with: tmux attach -t booth-b ; log: .state/logs/engine_b_server.log
 ```
 
-Then from your laptop's browser: `http://kxkm-ai:7860` (or the LAN IP). Allow the camera, press
-start, move. That page is what the visitor screen shows; the controls on it are the dials
-([TUNING.md](TUNING.md)).
+Then from your laptop's browser open the **panel** `http://kxkm-ai:7870`: the visitor screen
+preview, presets, prompt, knobs, the STOP / B / A switch. The demo's own page (`:7860`) is
+still there for anything the panel does not expose — never press "Start Stream" on it while
+the kiosk streams. Dials: [TUNING.md](TUNING.md).
 
 Measure (this is the reflex the project runs on):
 
