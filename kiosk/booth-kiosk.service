@@ -12,6 +12,8 @@ After=graphical-session.target
 [Service]
 Type=simple
 ExecStart=/ai/VideoBooth/kiosk/booth-kiosk.sh
+# the snap browser escapes the unit's cgroup — make sure a stop really stops it
+ExecStopPost=/bin/sh -c 'pkill -u "$USER" -f -- "--user-data-dir=.*booth-kiosk" || true'
 Restart=always
 RestartSec=3
 

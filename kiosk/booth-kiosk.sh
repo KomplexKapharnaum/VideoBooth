@@ -29,14 +29,20 @@ command -v unclutter >/dev/null && pgrep -x unclutter >/dev/null || unclutter --
 # browser cannot open files under /ai, and http://127.0.0.1 is a secure context for the camera.
 if ! curl -fs -m 1 "http://127.0.0.1:$KIOSK_HTTP_PORT/" >/dev/null 2>&1; then
   python3 -m http.server "$KIOSK_HTTP_PORT" --bind 127.0.0.1 --directory "$BOOTH_HOME/kiosk/www" >> "$BOOTH_LOGS/kiosk-www.log" 2>&1 &
-  WWW_PID=$!; trap 'kill $WWW_PID 2>/dev/null' EXIT
+  WWW_PID=$!
 fi
 
 # Chromium flags: kiosk + camera auto-grant (verified on Chrome 149, HNdi 2026-09-04) +
 # DevTools port for tools/fps_probe.py. 127.0.0.1 is a secure context, getUserMedia works.
 # --incognito: no session restore — a restart must not bring back the previous page as a
 # second tab (a stale demo tab keeps its own stream and starves the engine's event loop).
+# The snap browser runs in its own transient cgroup: a unit restart kills this script but
+# not the browser, and a relaunch would only add a tab to the survivor. Kill by profile path
+# (ours alone) before every launch and when this script exits.
+kill_browser() { pkill -u "$USER" -f -- "--user-data-dir=$PROFILE" 2>/dev/null && sleep 2; pkill -9 -u "$USER" -f -- "--user-data-dir=$PROFILE" 2>/dev/null; return 0; }
+trap 'kill_browser; kill $WWW_PID 2>/dev/null' EXIT INT TERM
 while true; do
+  kill_browser
   rm -f "$PROFILE/SingletonLock" 2>/dev/null
   "$CHROME" --kiosk --incognito --start-fullscreen --window-position=0,0 --no-first-run --noerrdialogs \
     --disable-infobars --disable-session-crashed-bubble --disable-features=TranslateUI \
