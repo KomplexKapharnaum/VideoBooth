@@ -38,7 +38,8 @@ CDP_PORT = int(ENV.get('CDP_PORT', '9222'))
 STATE_DIR = ENV.get('BOOTH_STATE', os.path.join(ROOT, '.state'))
 SD_CONFIG = ENV.get('SD_CONFIG', os.path.join(ROOT, 'engines/b-streamdiffusion/booth_sd15_depth.yaml'))
 KIOSK_B = f"http://127.0.0.1:{ENV.get('KIOSK_HTTP_PORT', '7861')}/output.html?server={B}"
-KIOSK_A = A + '/'
+KIOSK_A = f"http://127.0.0.1:{ENV.get('KIOSK_HTTP_PORT', '7861')}/scope.html?server={A}&pipeline=longlive&w=480&h=832"
+A_LOAD = {'height': 832, 'width': 480, 'vae_type': 'tae', 'base_seed': 42, 'vace_enabled': True, 'vace_context_scale': 0.85}
 SAFETY = 'nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation'
 LOG = []
 
@@ -228,8 +229,8 @@ def status():
               'sessions': a_metrics.get('sessions') if isinstance(a_metrics, dict) else None},
         'gpu': dict(zip(('mem_used', 'mem_total', 'util', 'temp'), [x.strip() for x in gpu.split(',')])) if ',' in gpu else {'raw': gpu[:80]},
         'showmode': {'on': show, 'stopped': stopped},
-        'kiosk': {'active': kiosk_active, 'url': kiosk_url, 'ws': ws_state, 'engine': 'A' if kiosk_url and f':{ENV.get("SCOPE_PORT", "8000")}' in kiosk_url else ('B' if kiosk_url else None)},
-        'tmux': tmux, 'log': LOG[-12:],
+        'kiosk': {'active': kiosk_active, 'url': kiosk_url, 'ws': ws_state, 'engine': 'A' if kiosk_url and 'scope.html' in kiosk_url else ('B' if kiosk_url else None)},
+        'tmux': tmux, 'log': LOG[-12:], 'switch': {k: SWITCH[k] for k in ('running', 'target', 'step', 'error')},
     }
 
 
@@ -280,6 +281,66 @@ def ops(action, arg=None):
     return f'unknown action {action}'
 
 
+# ---------------------------------------------------------------- engine switch (one button, all the steps)
+SWITCH = {'running': False, 'target': None, 'step': '', 'steps': [], 'error': None, 'done_at': None}
+
+
+def _sw(step):
+    SWITCH['step'] = step; SWITCH['steps'].append(f"{time.strftime('%H:%M:%S')} {step}"); log('switch: ' + step)
+
+
+def _wait(fn, timeout, every=2):
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        if fn():
+            return True
+        time.sleep(every)
+    return False
+
+
+def switch_job(target):
+    try:
+        if target == 'A':
+            _sw('kiosk → Scope page (waits for the pipeline)'); ops('kiosk_a')
+            _sw('stopping Engine B (frees ~5 GB)'); ops('engine_b_stop')
+            if not (isinstance(try_http(A + '/health', timeout=3), dict) and 'error' not in try_http(A + '/health', timeout=3)):
+                _sw('starting Scope server'); ops('engine_a_start')
+                if not _wait(lambda: 'error' not in try_http(A + '/health', timeout=3), 120): raise RuntimeError('Scope did not come up')
+            st = try_http(A + '/api/v1/pipeline/status', timeout=5)
+            if not (st.get('status') == 'loaded' and st.get('pipeline_id') == 'longlive'):
+                _sw('loading LongLive (480x832, tiny VAE, VACE weights) — 1–3 min'); try_http(A + '/api/v1/pipeline/load', 'POST', {'pipeline_ids': ['longlive'], 'load_params': A_LOAD}, timeout=30)
+                def loaded():
+                    s = try_http(A + '/api/v1/pipeline/status', timeout=5); SWITCH['step'] = f"loading LongLive… {s.get('loading_stage') or s.get('status')}"
+                    if s.get('status') == 'error' or s.get('error'): raise RuntimeError(f"pipeline load failed: {s.get('error')}")
+                    return s.get('status') == 'loaded'
+                if not _wait(loaded, 900, 3): raise RuntimeError('pipeline load timed out')
+            _sw('waiting for the kiosk page to connect over WebRTC')
+            def streaming():
+                s = try_http(A + '/api/v1/session/metrics', timeout=5); return bool(s.get('sessions'))
+            _wait(streaming, 60, 2)
+            _sw('done — kiosk on Engine A (LongLive); VACE weights loaded, VACE off until toggled')
+        else:
+            _sw('kiosk → Engine B page (waits for the engine)'); ops('kiosk_b')
+            _sw('stopping the Scope session and freeing its VRAM (Scope restarts idle)'); try_http(A + '/api/v1/session/stop', 'POST', {}, timeout=10); ops('engine_a_free')
+            _sw('starting Engine B'); ops('engine_b_start')
+            if not _wait(lambda: 'error' not in try_http(B + '/api/settings', timeout=3), 180): raise RuntimeError('Engine B did not come up')
+            _sw('Engine B up — the kiosk page reconnects and the pipeline rebuilds (~30 s)')
+            _wait(lambda: (b_state().get('fps') or 0) > 1, 120, 3)
+            _sw('done — kiosk on Engine B')
+    except Exception as e:  # noqa: BLE001
+        SWITCH['error'] = str(e)[:300]; _sw('FAILED: ' + SWITCH['error'])
+    finally:
+        SWITCH['running'] = False; SWITCH['done_at'] = time.time()
+
+
+def start_switch(target):
+    if SWITCH['running']:
+        return {'error': f"a switch to {SWITCH['target']} is already running"}
+    SWITCH.update(running=True, target=target, step='starting', steps=[], error=None, done_at=None)
+    threading.Thread(target=switch_job, args=(target,), daemon=True).start()
+    return {'started': target}
+
+
 # ---------------------------------------------------------------- HTTP
 class H(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **k):
@@ -299,6 +360,8 @@ class H(http.server.SimpleHTTPRequestHandler):
             return self._json(status())
         if u.path == '/api/presets':
             return self._json(presets())
+        if u.path == '/api/switch/status':
+            return self._json(SWITCH)
         if u.path == '/api/preview.jpg':
             try:
                 data = preview_jpeg(int(q.get('w', ['480'])[0]))
@@ -323,6 +386,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             elif p == '/api/a/params':     r = a_params(body)
             elif p == '/api/a/reset':      r = a_params({'reset_cache': True}); log('A reset')
             elif p == '/api/ops':          r = ops(body['action'], body.get('arg')); log(f"ops {body['action']}: {str(r)[-80:]}")
+            elif p == '/api/switch':       r = start_switch(body.get('engine', 'B').upper())
             else:                          return self._json({'error': 'unknown endpoint'}, 404)
             self._json({'ok': True, 'result': r})
         except Exception as e:  # noqa: BLE001

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>VideoBooth · Scope</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
+  #out{position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;background:#000}
+  #out.contain{object-fit:contain} #out.mirror{transform:scaleX(-1)}
+  #cam,#cv{position:fixed;left:-9999px;top:0}
+</style></head>
+<body>
+<!--
+  VideoBooth visitor page for Engine A (Daydream Scope). Mirrors what Scope's own UI does over
+  WebRTC, without any UI: the camera (cover-cropped to the generation size on a canvas) is sent
+  as a video track, the offer carries the initial parameters (video mode, pipeline, prompt),
+  ICE candidates go to PATCH /api/v1/webrtc/offer/<session>, and the remote track is shown
+  full-screen. The pipeline must be LOADED first (the panel's engine switch does that); until
+  it is, the offer fails and the page retries every 3 s. Reconnects on any failure.
+  URL parameters: server=http://127.0.0.1:8000  pipeline=longlive  w=480&h=832  prompt=…
+                  noise=0.7  fit=cover|contain  mirror=1|0  cam=<label substring>
+-->
+<video id="out" autoplay playsinline muted></video>
+<video id="cam" autoplay playsinline muted></video>
+<canvas id="cv"></canvas>
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const server = (q.get('server') || 'http://127.0.0.1:8000').replace(/\/$/, '');
+  const pipeline = q.get('pipeline') || 'longlive';
+  const W = +q.get('w') || 480, H = +q.get('h') || 832;
+  const prompt = q.get('prompt') || 'a superhero in a sleek chrome armored suit, glowing blue chest emblem, dramatic rim light, cinematic';
+  const noise = q.get('noise') != null ? +q.get('noise') : 0.7;
+  const out = document.getElementById('out'), cam = document.getElementById('cam'), cv = document.getElementById('cv');
+  if ((q.get('fit') || 'cover') === 'contain') out.classList.add('contain');
+  if ((q.get('mirror') ?? '1') !== '0') out.classList.add('mirror');
+  const log = (...a) => console.log('[booth-scope]', ...a);
+
+  // camera → portrait cover-crop canvas → the track we send
+  async function openCamera() {
+    let deviceId; const want = q.get('cam');
+    if (want) { const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput'); const hit = devs.find(d => d.label.toLowerCase().includes(want.toLowerCase())); if (hit) deviceId = hit.deviceId; }
+    cam.srcObject = await navigator.mediaDevices.getUserMedia({video: {width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 30}, ...(deviceId ? {deviceId: {exact: deviceId}} : {})}, audio: false});
+    await new Promise(r => cam.onloadedmetadata = r);
+    log('camera', cam.videoWidth + 'x' + cam.videoHeight);
+  }
+  cv.width = W; cv.height = H; const ctx = cv.getContext('2d', {alpha: false});
+  function drawLoop() {
+    const vw = cam.videoWidth, vh = cam.videoHeight;
+    if (vw) { const s = Math.max(W / vw, H / vh), sw = W / s, sh = H / s; ctx.drawImage(cam, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, W, H); }
+    requestAnimationFrame(drawLoop);
+  }
+
+  let pc = null, retryTimer = null;
+  async function iceServers() {
+    try { const r = await fetch(server + '/api/v1/webrtc/ice-servers'); const j = await r.json(); if (j.iceServers && j.iceServers.length) return j.iceServers; } catch {}
+    return [{urls: 'stun:stun.l.google.com:19302'}];
+  }
+  async function connect() {
+    clearTimeout(retryTimer);
+    try {
+      const st = await (await fetch(server + '/api/v1/pipeline/status')).json();
+      if (st.status !== 'loaded') { log('pipeline not loaded:', st.status, st.loading_stage || ''); return retry(3000); }
+      pc = new RTCPeerConnection({iceServers: await iceServers()});
+      const dc = pc.createDataChannel('parameters', {ordered: true});
+      dc.onmessage = () => {};
+      const sendStream = cv.captureStream(30);
+      pc.addTrack(sendStream.getVideoTracks()[0], sendStream);
+      pc.addTransceiver('audio', {direction: 'recvonly'});
+      pc.ontrack = evt => { if (evt.track.kind === 'video') { out.srcObject = new MediaStream([evt.track]); log('remote video track'); } };
+      let sessionId = null; const queued = [];
+      pc.onicecandidate = async ({candidate}) => {
+        if (!candidate) return;
+        if (!sessionId) { queued.push(candidate); return; }
+        await sendIce(sessionId, [candidate]);
+      };
+      pc.onconnectionstatechange = () => { log('pc', pc.connectionState); if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) reconnect(); };
+      const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+      const body = {sdp: pc.localDescription.sdp, type: pc.localDescription.type,
+                    initialParameters: {input_mode: 'video', pipeline_ids: [pipeline], prompts: [{text: prompt, weight: 1.0}], noise_scale: noise}};
+      const r = await fetch(server + '/api/v1/webrtc/offer', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+      if (!r.ok) { log('offer failed', r.status, (await r.text()).slice(0, 200)); return reconnect(); }
+      const ans = await r.json(); sessionId = ans.sessionId;
+      await pc.setRemoteDescription({sdp: ans.sdp, type: ans.type});
+      if (queued.length) await sendIce(sessionId, queued.splice(0));
+      log('session', sessionId);
+    } catch (e) { log('connect error', e); reconnect(); }
+  }
+  async function sendIce(sessionId, cands) {
+    try { await fetch(`${server}/api/v1/webrtc/offer/${sessionId}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({candidates: cands.map(c => ({candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex}))})}); } catch (e) { log('ice send failed', e); }
+  }
+  function retry(ms) { clearTimeout(retryTimer); retryTimer = setTimeout(connect, ms); }
+  function reconnect() { try { pc && pc.close(); } catch {} pc = null; out.srcObject = null; retry(2000); }
+
+  try { await openCamera(); } catch (e) { log('camera failed', e); setTimeout(() => location.reload(), 5000); return; }
+  drawLoop(); connect();
+  window.__booth = {get server() { return server; }, get ws() { return pc ? ({new: 0, connecting: 0, connected: 1, disconnected: 3, failed: 3, closed: 3})[pc.connectionState] ?? 0 : 0; }, get pc() { return pc; }};
+})();
+</script>
+</body></html>

@@ -43,22 +43,31 @@
     <h2>Render preview — what the visitor sees</h2>
     <img id="preview" alt="preview">
     <div class="row"><span class="hint" id="preview-hint">live screenshot of the kiosk browser, 2 fps</span></div>
-    <h2 style="margin-top:14px">Show operations</h2>
+    <h2 style="margin-top:14px">Engine on the visitor screen</h2>
     <div class="row">
-      <button data-op="showmode_on" title="stop the other GPU tenants">Show mode ON</button>
-      <button data-op="showmode_off">Show mode OFF</button>
+      <div class="seg" id="engine-switch"><button data-engine="B">B · StreamDiffusion</button><button data-engine="A">A · Scope LongLive</button></div>
     </div>
+    <div class="hint" id="switch-status">—</div>
+    <div class="hint">One button does everything: stops the other engine (GPU memory), loads the pipeline, points the visitor screen at the right page. B → A takes 1–3 min, A → B about 1 min. The screen goes black meanwhile.</div>
+    <h2 style="margin-top:14px">Show mode</h2>
     <div class="row">
-      <button data-op="engine_b_start">Engine B start</button><button data-op="engine_b_stop" class="danger">B stop</button>
-      <button data-op="engine_a_start">Engine A start</button><button data-op="engine_a_stop" class="danger">A stop</button>
-      <button data-op="engine_a_free" title="Scope keeps ~22 GB loaded after a session: restart it">A free GPU</button>
+      <button data-op="showmode_on" id="show-on">Show mode ON</button>
+      <button data-op="showmode_off" id="show-off">Show mode OFF</button>
+      <span class="hint">ON pauses the box's other GPU users (whisper, TTS, LLMs) — before the show; OFF gives them back after.</span>
     </div>
-    <div class="row">
-      <button data-op="kiosk_b" title="Engine B output-only page">Kiosk → B</button>
-      <button data-op="kiosk_a" title="Scope's own page">Kiosk → A</button>
-      <button data-op="kiosk_restart">Kiosk restart</button>
-    </div>
-    <div id="log"></div>
+    <details style="margin-top:10px"><summary class="hint" style="cursor:pointer">Advanced (raw operations)</summary>
+      <div class="row" style="margin-top:8px">
+        <button data-op="engine_b_start">Engine B start</button><button data-op="engine_b_stop" class="danger">B stop</button>
+        <button data-op="engine_a_start">Engine A start</button><button data-op="engine_a_stop" class="danger">A stop</button>
+        <button data-op="engine_a_free" title="Scope keeps ~22 GB loaded after a session: restart it idle">A free GPU</button>
+      </div>
+      <div class="row">
+        <button data-op="kiosk_b" title="point the screen at the Engine B page">Kiosk → B page</button>
+        <button data-op="kiosk_a" title="point the screen at the Scope page">Kiosk → A page</button>
+        <button data-op="kiosk_restart">Kiosk restart</button>
+      </div>
+    </details>
+    <div id="log" style="margin-top:10px"></div>
   </section>
 
   <section>
@@ -112,6 +121,9 @@ async function poll() {
     const g = s.gpu; $('#c-gpu').innerHTML = g.mem_used ? `GPU <b>${g.mem_used}/${g.mem_total} MB</b> ${g.util}% ${g.temp}°C` : 'GPU ?';
     $('#c-kiosk').className = 'chip ' + (s.kiosk.active ? (s.kiosk.ws === 1 ? 'ok' : 'warn') : 'bad'); $('#c-kiosk').innerHTML = 'kiosk ' + (s.kiosk.active ? (s.kiosk.ws === 1 ? '<b>streaming</b>' : (s.kiosk.ws === -1 ? 'page up' : 'reconnecting…')) : 'down');
     $('#c-show').className = 'chip ' + (s.showmode.on ? 'ok' : ''); $('#c-show').innerHTML = 'show mode <b>' + (s.showmode.on ? 'ON' : 'off') + '</b>';
+    $('#show-on').classList.toggle('on', s.showmode.on); $('#show-off').classList.toggle('on', !s.showmode.on);
+    const sw = s.switch || {}; document.querySelectorAll('#engine-switch button').forEach(b => { b.classList.toggle('on', !sw.running && b.dataset.engine === s.kiosk.engine); b.disabled = !!sw.running; });
+    $('#switch-status').textContent = sw.running ? `switching to ${sw.target}: ${sw.step}` : (sw.error ? 'last switch failed: ' + sw.error : (s.kiosk.engine ? `visitor screen on Engine ${s.kiosk.engine}` + (s.kiosk.ws === 1 ? ' — streaming' : ' — not streaming yet') : 'kiosk page unknown'));
     $('#c-time').textContent = s.time;
     $('#knobs-engine').textContent = 'Engine ' + engine; $('#knobs-b').classList.toggle('hide', engine !== 'B'); $('#knobs-a').classList.toggle('hide', engine !== 'A');
     $('#neg-hint').textContent = engine === 'B' ? 'Engine B: rebuilds the pipeline, ~20 s black' : 'Engine A: live';
@@ -155,6 +167,9 @@ $('#k-noise').oninput = e => { $('#v-noise').textContent = (+e.target.value).toF
 $('#k-vace').oninput = e => { $('#v-vace').textContent = (+e.target.value).toFixed(2); sendA({vace_context_scale: +e.target.value}); };
 $('#vace-toggle').onclick = () => { vaceOn = !vaceOn; $('#vace-toggle').textContent = 'VACE ' + (vaceOn ? 'ON' : 'OFF'); sendA({vace_enabled: vaceOn, vace_use_input_video: vaceOn}); };
 $('#a-reset').onclick = async () => { const r = await api('/api/a/reset'); say('A reset ' + (r.ok ? '✓' : '✗')); };
+
+// ---- engine switch
+document.querySelectorAll('#engine-switch button').forEach(b => b.onclick = async () => { if (b.classList.contains('on')) return; const r = await api('/api/switch', {engine: b.dataset.engine}); say('switch → ' + b.dataset.engine + (r.ok ? ' started' : ' ✗ ' + r.error)); filled = false; poll(); });
 
 // ---- ops
 document.querySelectorAll('[data-op]').forEach(b => b.onclick = async () => { b.disabled = true; say(b.dataset.op + ' …'); const r = await api('/api/ops', {action: b.dataset.op}); b.disabled = false; say(b.dataset.op + ': ' + (r.ok ? String(r.result).slice(-160) : '✗ ' + r.error)); filled = false; });
