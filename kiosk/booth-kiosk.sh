@@ -25,6 +25,13 @@ if [ -n "$OUT" ]; then
 fi
 command -v unclutter >/dev/null && pgrep -x unclutter >/dev/null || unclutter --timeout 1 --fork 2>/dev/null || true
 
+# Serve kiosk/www (the output-only page) on 127.0.0.1:$KIOSK_HTTP_PORT — the snap-confined
+# browser cannot open files under /ai, and http://127.0.0.1 is a secure context for the camera.
+if ! curl -fs -m 1 "http://127.0.0.1:$KIOSK_HTTP_PORT/" >/dev/null 2>&1; then
+  python3 -m http.server "$KIOSK_HTTP_PORT" --bind 127.0.0.1 --directory "$BOOTH_HOME/kiosk/www" >> "$BOOTH_LOGS/kiosk-www.log" 2>&1 &
+  WWW_PID=$!; trap 'kill $WWW_PID 2>/dev/null' EXIT
+fi
+
 # Chromium flags: kiosk + camera auto-grant (verified on Chrome 149, HNdi 2026-09-04) +
 # DevTools port for tools/fps_probe.py. 127.0.0.1 is a secure context, getUserMedia works.
 while true; do

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>VideoBooth</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
+  #out{position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;background:#000}
+  #out.contain{object-fit:contain}
+  #out.mirror{transform:scaleX(-1)}
+  #cam,#cv{position:fixed;left:-9999px;top:0}
+</style></head>
+<body>
+<!--
+  VideoBooth output-only page for Engine B (StreamDiffusion realtime-img2img demo).
+  What the visitor screen shows: the generated video, nothing else. The page holds the camera
+  (getUserMedia, auto-granted by the kiosk Chromium flags), feeds the demo's websocket the
+  way its own UI does (server says "send_frame" → we answer "next_frame" + params + one JPEG),
+  and displays /api/stream/<uuid> (multipart MJPEG) full-screen. Reconnects by itself when
+  the engine restarts. The technician drives the look from the demo UI on a laptop (its
+  sliders act on the shared pipeline) — never "Start Stream" there.
+
+  URL parameters (all optional):
+    server=http://127.0.0.1:7860   engine base URL (default: 127.0.0.1:7860)
+    w=512&h=768                    JPEG we send = generation size (match the yaml)
+    cam=<label substring>          pick a camera by label (default: first camera)
+    fit=cover|contain              how the output fills the panel (default cover)
+    mirror=1|0                     mirror the output like a mirror would (default 1)
+    q=0.85                         JPEG quality of the frames we send
+-->
+<img id="out" alt="">
+<video id="cam" autoplay playsinline muted></video>
+<canvas id="cv"></canvas>
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const server = (q.get('server') || 'http://127.0.0.1:7860').replace(/\/$/, '');
+  const W = +q.get('w') || 512, H = +q.get('h') || 768, quality = +q.get('q') || 0.85;
+  const out = document.getElementById('out'), cam = document.getElementById('cam'), cv = document.getElementById('cv');
+  if ((q.get('fit') || 'cover') === 'contain') out.classList.add('contain');
+  if ((q.get('mirror') ?? '1') !== '0') out.classList.add('mirror');
+  cv.width = W; cv.height = H; const ctx = cv.getContext('2d', {alpha: false});
+  const log = (...a) => console.log('[booth]', ...a);
+
+  // --- camera: portrait cover-crop of whatever the camera gives (a landscape Brio included)
+  async function openCamera() {
+    let deviceId;
+    const want = q.get('cam');
+    if (want) {
+      const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+      const hit = devs.find(d => d.label.toLowerCase().includes(want.toLowerCase()));
+      if (hit) deviceId = hit.deviceId;
+    }
+    const constraints = {video: {width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 30}, ...(deviceId ? {deviceId: {exact: deviceId}} : {})}, audio: false};
+    cam.srcObject = await navigator.mediaDevices.getUserMedia(constraints);
+    await new Promise(r => cam.onloadedmetadata = r);
+    const t = cam.srcObject.getVideoTracks()[0].getSettings();
+    log('camera', t.width + 'x' + t.height + '@' + t.frameRate, cam.srcObject.getVideoTracks()[0].label);
+  }
+  function grab() {
+    const vw = cam.videoWidth, vh = cam.videoHeight; if (!vw) return null;
+    const s = Math.max(W / vw, H / vh), sw = W / s, sh = H / s;   // cover-crop, centred
+    ctx.drawImage(cam, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, W, H);
+    return new Promise(res => cv.toBlob(res, 'image/jpeg', quality));
+  }
+
+  // --- engine session: one websocket + one MJPEG <img>, forever
+  const resolutionLabel = `${W}x${H}`;
+  let ws, lastFrameAt = 0, watchdog;
+  function connect() {
+    const uid = crypto.randomUUID();
+    const wsUrl = server.replace(/^http/, 'ws') + '/api/ws/' + uid;
+    ws = new WebSocket(wsUrl);
+    ws.onopen = () => log('ws open', uid);
+    ws.onmessage = async (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.status === 'connected') {
+        out.src = `${server}/api/stream/${uid}`; lastFrameAt = performance.now();
+      } else if (m.status === 'send_frame') {
+        lastFrameAt = performance.now();
+        const blob = await grab(); if (!blob || ws.readyState !== 1) return;
+        ws.send(JSON.stringify({status: 'next_frame'}));
+        ws.send(JSON.stringify({resolution: resolutionLabel, width: W, height: H}));
+        ws.send(blob);
+      } else if (m.status === 'timeout' || m.status === 'error') {
+        log('server says', m.status, m.message || ''); ws.close();
+      }
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => { log('ws closed — retry in 2 s'); out.removeAttribute('src'); clearInterval(watchdog); setTimeout(connect, 2000); };
+    clearInterval(watchdog);
+    watchdog = setInterval(() => {   // engine stalled (no send_frame for 8 s) → reconnect
+      if (ws.readyState === 1 && lastFrameAt && performance.now() - lastFrameAt > 8000) { log('stall watchdog'); ws.close(); }
+    }, 2000);
+  }
+
+  try { await openCamera(); } catch (e) { log('camera failed', e); setTimeout(() => location.reload(), 5000); return; }
+  connect();
+  window.__booth = {get server() { return server; }, get ws() { return ws; }};
+})();
+</script>
+</body></html>

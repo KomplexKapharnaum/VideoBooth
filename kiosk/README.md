@@ -13,7 +13,11 @@ holds the camera (`getUserMedia`, auto-granted) and displays the WebRTC output.
 Manual test without the unit, from the desktop session: `kiosk/booth-kiosk.sh`.
 Stop the unit: `systemctl --user stop booth-kiosk`. Change URL: edit `booth.conf`, restart.
 
-Open (Phase 1): each engine demo page shows its controls next to the video; the visitor
-screen wants the output only. Either the demo's own fullscreen/output view, or a small
-wrapper page in this folder that opens the camera, connects to the engine and shows only
-the output — written against the engine's real API once measured.
+**`www/output.html`** — the visitor page for Engine B: black page, output full-screen,
+nothing else. It opens the camera, feeds the demo's websocket exactly like the demo UI does
+and shows `/api/stream/<uuid>`; reconnects by itself when the engine restarts (stall watchdog
+at 8 s). Served by `booth-kiosk.sh` on `127.0.0.1:7861` (the snap browser cannot read `/ai`).
+URL options: `server=`, `w=`/`h=` (must match the yaml), `cam=<label>`, `fit=cover|contain`,
+`mirror=1|0` (default mirrored, like a mirror). The technician's laptop uses the demo UI
+(`http://<box>:7860`) for the dials — its sliders act on the shared pipeline — and must not
+press "Start Stream" there. For Engine A (Scope) point `KIOSK_URL` at Scope's own page.

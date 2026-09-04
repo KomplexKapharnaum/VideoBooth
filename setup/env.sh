@@ -24,7 +24,8 @@ SCOPE_PORT=8000
 
 # Camera / kiosk
 CAMERA_DEV=${CAMERA_DEV:-/dev/video0}
-KIOSK_URL=${KIOSK_URL:-http://127.0.0.1:$SD_PORT}
+KIOSK_HTTP_PORT=7861                           # kiosk/www served on 127.0.0.1 by booth-kiosk.sh (the snap browser cannot read /ai)
+KIOSK_URL=${KIOSK_URL:-http://127.0.0.1:$KIOSK_HTTP_PORT/output.html?server=http://127.0.0.1:$SD_PORT}   # output-only page for Engine B
 KIOSK_ROTATE=${KIOSK_ROTATE:-left}             # normal | left | right | inverted (xrandr)
 KIOSK_MODE=${KIOSK_MODE:-}                     # e.g. 3840x2160 ; empty = panel native (--auto)
 KIOSK_OUTPUT=${KIOSK_OUTPUT:-}                 # xrandr output name; empty = first connected
