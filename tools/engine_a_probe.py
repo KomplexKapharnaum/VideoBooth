@@ -77,6 +77,13 @@ def main():
     ap.add_argument('--prompt', default='a superhero in a sleek chrome armored suit, glowing blue chest emblem, dramatic rim light, cinematic')
     ap.add_argument('--vace', action='store_true', help='enable VACE with the input video as control')
     ap.add_argument('--vace-scale', type=float, default=0.85)
+    ap.add_argument('--width', type=int, default=480)
+    ap.add_argument('--height', type=int, default=832)
+    ap.add_argument('--vae', default='tae', help='vae_type load param: wan | lightvae | tae | lighttae (tae = tiny VAE)')
+    ap.add_argument('--quant', default=None, help='quantization load param, e.g. fp8_e4m3fn')
+    ap.add_argument('--load-steps', default=None, help='denoising_steps load param, comma-separated timesteps (pipeline default [1000,750,500,250])')
+    ap.add_argument('--seed', type=int, default=42)
+    ap.add_argument('--load-timeout', type=float, default=1800)
     ap.add_argument('--noise-scale', type=float, default=None)
     ap.add_argument('--steps', default=None, help='denoising_step_list, comma-separated (pipeline default if omitted)')
     ap.add_argument('--param', action='append', default=[], metavar='KEY=JSON', help='extra session parameter, e.g. --param kv_cache_attention_bias=0.5')
@@ -90,6 +97,25 @@ def main():
     ap.add_argument('--keep', action='store_true', help='leave the session running at the end')
     a = ap.parse_args()
     B = a.server.rstrip('/')
+
+    # 1. load the pipeline (single-pipeline sessions do NOT load it themselves), then wait
+    load = {'height': a.height, 'width': a.width, 'vae_type': a.vae, 'base_seed': a.seed}
+    if a.quant: load['quantization'] = a.quant
+    if a.load_steps: load['denoising_steps'] = [int(x) for x in a.load_steps.split(',')]
+    if a.vace: load.update(vace_enabled=True, vace_context_scale=a.vace_scale)
+    st = api(B, '/api/v1/pipeline/status')
+    if not (st.get('status') == 'loaded' and st.get('pipeline_id') == a.pipeline and (st.get('load_params') or {}).items() >= load.items()):
+        print(f'loading {a.pipeline} {json.dumps(load)}', file=sys.stderr)
+        t0 = time.time(); api(B, '/api/v1/pipeline/load', 'POST', {'pipeline_ids': [a.pipeline], 'load_params': load})
+        while True:
+            st = api(B, '/api/v1/pipeline/status')
+            if st.get('status') == 'loaded': break
+            if st.get('status') == 'error' or st.get('error'): sys.exit(f'pipeline load failed: {json.dumps(st)[:400]}')
+            if time.time() - t0 > a.load_timeout: sys.exit('pipeline load timed out')
+            time.sleep(3)
+        print(f'loaded in {time.time() - t0:.0f}s (stage {st.get("loading_stage")})', file=sys.stderr)
+    else:
+        print('pipeline already loaded with these params', file=sys.stderr)
 
     params = {}
     if a.vace:
@@ -135,7 +161,7 @@ def main():
     t = [x for x in rd.t if x >= cut]
     d = sorted(b - x for x, b in zip(t, t[1:])); span = t[-1] - t[0]
     dd = [b - x for x, b in zip(t, t[1:])]
-    stats = dict(label=a.label, pipeline=a.pipeline, clip=a.clip, params=params, frames=len(t), seconds=round(span, 1),
+    stats = dict(label=a.label, pipeline=a.pipeline, clip=a.clip, load=load, params=params, frames=len(t), seconds=round(span, 1),
                  fps=round((len(t) - 1) / span, 2), mean_ms=round(statistics.fmean(dd) * 1000, 1), p50_ms=round(pct(d, .5) * 1000, 1),
                  p95_ms=round(pct(d, .95) * 1000, 1), max_ms=round(max(dd) * 1000, 1), stdev_ms=round(statistics.pstdev(dd) * 1000, 1),
                  stalls=sum(1 for x in dd if x * 1000 > a.stall_ms), stall_ms=a.stall_ms, warmup_s=a.warmup)
@@ -153,7 +179,7 @@ def main():
     if a.save_frame and rd.last:
         with open(a.save_frame, 'wb') as f: f.write(rd.last)
     print(json.dumps(stats))
-    print(f"| {time.strftime('%Y-%m-%d %H:%M')} | {a.label or '-'} | {a.pipeline} {'+VACE ' + str(a.vace_scale) if a.vace else 'bare'} · {a.clip} | {stats['fps']} fps | "
+    print(f"| {time.strftime('%Y-%m-%d %H:%M')} | {a.label or '-'} | {a.pipeline} {a.width}x{a.height} vae={a.vae} steps={load.get('denoising_steps', 'default')} {'+VACE ' + str(a.vace_scale) if a.vace else 'bare'} · {a.clip} | {stats['fps']} fps | "
           f"{stats['mean_ms']} / {stats['p95_ms']} / {stats['max_ms']} ms (mean/p95/max) | sd {stats['stdev_ms']} ms | stalls>{int(a.stall_ms)}ms: {stats['stalls']} | "
           f"scope pipeline_fps {stats['scope_metrics'].get('pipeline_fps')} | flashes seen {stats.get('flashes_seen', 'n/a')} |")
 
