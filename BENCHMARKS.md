@@ -11,11 +11,98 @@ Protocol for latency: `tools/LATENCY.md`.
 
 ## Machine (setup/00_audit.sh)
 
-_pending — run after the driver fix and reboot_
+## Machine audit — kxkm-ai — 2026-09-04T13:21:59+02:00
+
+### Host
+```
+ 13:21:59 up 19 min,  4 users,  load average: 0,20, 0,23, 0,25
+PRETTY_NAME="Ubuntu 24.04.4 LTS"
+VERSION_ID="24.04"
+kernel: 6.17.0-1032-oem
+```
+
+### NVIDIA
+```
+name, driver_version, memory.used [MiB], memory.total [MiB]
+NVIDIA GeForce RTX 4090, 595.84, 2648 MiB, 24564 MiB
+kernel module: 595.84
+userspace    : nvidia-utils-595 595.84-0ubuntu0.24.04.1
+module on disk for 6.17.0-1032-oem: 595.84
+newest kernel (grub default 0): 6.17.0-1032-oem
+secure boot: SecureBoot enabled
+```
+
+### GPU processes
+```
+pid, process_name, used_gpu_memory [MiB]
+3406, python3, 2466 MiB
+```
+
+### CPU / RAM / disk
+```
+Model name:                              Intel(R) Core(TM) i7-14700KF
+28
+               total        used        free      shared  buff/cache   available
+Mem:            62Gi        12Gi        24Gi        35Mi        25Gi        49Gi
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p3  1,8T  765G  919G  46% /
+/dev/nvme0n1p3  1,8T  765G  919G  46% /
+```
+
+### Python / tooling
+```
+Python 3.12.3
+uv: /home/kxkm/.local/bin/uv
+node: v22.23.2
+chrome: /snap/bin/chromium
+ffmpeg: /usr/bin/ffmpeg
+v4l2-ctl: /usr/bin/v4l2-ctl
+docker: /usr/bin/docker
+```
+
+### User / groups
+```
+uid=1000(kxkm) gid=1000(kxkm) groups=1000(kxkm),4(adm),24(cdrom),27(sudo),30(dip),44(video),46(plugdev),122(lpadmin),135(lxd),136(sambashare),141(docker),995(ollama),1001(ai)
+video group: yes
+Linger=yes
+```
+
+### Display
+```
+card1-HDMI-A-2: connected, modes: 3840x2160
+AutomaticLoginEnable=True
+AutomaticLogin=kxkm
+WaylandEnable=false
+15 1000 kxkm     -     -    closing no  -
+37 1000 kxkm     -     -    active  no  -
+ 5 6000 electron -     -    active  no  -
+c1  128 gdm      seat0 tty1 active  yes 14min ago
+```
+
+### Cameras
+```
+aGent V5 full HD: aGent V5 full (usb-0000:00:14.0-11):
+	/dev/video0
+	/dev/video1
+	/dev/media0
+
+crw-rw----+ 1 root video 81, 0 sept.  4 13:11 /dev/video0
+crw-rw----+ 1 root video 81, 1 sept.  4 13:11 /dev/video1
+```
+
+### Listening ports (booth-relevant)
+```
+0.0.0.0:18890
+0.0.0.0:7865
+*:9211
+```
 
 ## Camera (tools/camera_check.sh)
 
-_pending_
+### 2026-09-04 — interim USB webcam on the box (not the show camera)
+`/dev/video0` = "aGent V5 full HD" (USB2, Z-Star). Every listed mode is 15 fps max (7.5 fps
+alternate); 1920x1080 MJPEG through ffmpeg decode ran at ~9 fps. Usable to plumb the engines,
+useless for fps or latency baselines — those wait for the Brio 4K (week of 2026-09-07).
 
 ## Engine B — StreamDiffusion (SD1.5-LCM + depth ControlNet + TensorRT)
 
