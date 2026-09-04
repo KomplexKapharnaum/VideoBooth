@@ -1,7 +1,8 @@
 # VideoBooth — Engine B baseline (CLAUDE.md §5). Keys per the Daydream fork's
 # configs/sd15_multicontrol.yaml.example + src/streamdiffusion/config.py (read on the box,
 # 2026-09-04). Values are starting points: every change goes to BENCHMARKS.md with its number.
-model_id_or_path: "SimianLuo/LCM_Dreamshaper_v7"   # the demo's AppState reads THIS key (not model_id); local alt: /ai/data/models/checkpoints/LCM_Dreamshaper_v7_4k.safetensors
+model_id: "SimianLuo/LCM_Dreamshaper_v7"           # library key (required by streamdiffusion.config); local alt: /ai/data/models/checkpoints/LCM_Dreamshaper_v7_4k.safetensors
+model_id_or_path: "SimianLuo/LCM_Dreamshaper_v7"   # the demo's AppState reads this one — keep both identical
 prompt: "a superhero in a sleek chrome armored suit, glowing blue chest emblem, dramatic rim light, cinematic still, sharp focus"
 negative_prompt: "nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation, ugly, deformed, bad anatomy, extra limbs, blurry, low quality, watermark, text"
 t_index_list: [24]                            # 1 step ≈ denoise 0.5 · 2 steps: [18, 32] · lower index = more change
