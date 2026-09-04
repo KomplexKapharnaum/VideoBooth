@@ -33,18 +33,29 @@ import tensorrt; print("tensorrt", tensorrt.__version__)
 PY
 
 cd demo/realtime-img2img
-# The demo's requirements.txt carries an UNPINNED xformers (it pulled torch 2.14 cu130 on
-# 2026-09-04, replacing the cu128 torch above, and its wheel then breaks the diffusers import
-# against torch 2.8) and a stable_fast wheel built for torch 2.1.1. Neither is used with
-# --acceleration tensorrt: install the rest, drop both, re-pin torch, assert CUDA 12.
-grep -v -E '^\s*(xformers|stable_fast)' requirements.txt > /tmp/booth-req.txt
+# The demo's requirements.txt fights the package's own pins (2026-09-04 findings):
+#  - an UNPINNED xformers pulls torch 2.14 cu130 (replacing the cu128 torch above) and then
+#    breaks the diffusers import against torch 2.8;
+#  - a stable_fast wheel built for torch 2.1.1;
+#  - `diffusers==0.35.0` overwrites the fork's CUSTOM diffusers (setup.py: varshith15/diffusers
+#    @3e3b72f, whose UNet forward accepts `kvo_cache`) → TensorRT UNet export fails with
+#    "unexpected keyword argument 'kvo_cache'" ("Acceleration has failed").
+# None of the three is needed with --acceleration tensorrt: install the rest, then let the
+# package re-assert its own deps, drop xformers/stable_fast, re-pin torch, assert everything.
+grep -v -E '^\s*(xformers|stable_fast|diffusers)' requirements.txt > /tmp/booth-req.txt
 uv pip install -r /tmp/booth-req.txt
+uv pip install -e "$SD_DIR[tensorrt,controlnet,ipadapter]"
 uv pip uninstall xformers stable_fast >/dev/null 2>&1 || true
 uv pip install "torch==2.8.0" "torchvision==0.23.0" --index-url https://download.pytorch.org/whl/cu128
+uv pip install "cuda-python<13"
 python - <<'PYCHK'
-import torch, tensorrt, streamdiffusion
+import inspect, torch, tensorrt, diffusers, streamdiffusion
+from diffusers import UNet2DConditionModel
+from cuda import cudart
+from streamdiffusion.acceleration.tensorrt import TorchVAEEncoder
 assert torch.version.cuda.startswith("12."), f"torch built for CUDA {torch.version.cuda}, expected 12.x (cu128)"
-print("re-pinned: torch", torch.__version__, "cuda", torch.version.cuda, "| tensorrt", tensorrt.__version__, "| streamdiffusion import ok")
+assert "kvo_cache" in inspect.signature(UNet2DConditionModel.forward).parameters, "stock diffusers installed — the fork's custom diffusers is required"
+print("ok: torch", torch.__version__, "cuda", torch.version.cuda, "| tensorrt", tensorrt.__version__, "| diffusers", diffusers.__version__, "(fork build) | acceleration import ok")
 PYCHK
 ( cd frontend && npm i --silent && npm run build --silent )
 mkdir -p "$SD_TRT_ENGINES"
