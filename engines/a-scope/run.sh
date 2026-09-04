@@ -5,4 +5,6 @@ set -euo pipefail
 [ -d "$SCOPE_DIR" ] || { echo "not installed: setup/20_engine_a.sh"; exit 1; }
 cd "$SCOPE_DIR"
 echo "scope @ $(git rev-parse --short HEAD) — first run downloads > 10 GB of weights (ask first)"
-exec uv run daydream-scope "$@"   # flags: uv run daydream-scope --help
+# --host 0.0.0.0: default binds 127.0.0.1 only (technician laptop could not reach it);
+# -N: never pop a browser window in the kiosk session. Other flags: uv run daydream-scope --help
+exec uv run daydream-scope --host 0.0.0.0 --port "$SCOPE_PORT" -N "$@"

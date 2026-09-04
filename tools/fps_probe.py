@@ -30,15 +30,38 @@ HOOK = """(() => {
 READ = "(() => { window.__fp.stop = true; return JSON.stringify([window.__fp.t, window.__fp.pf]); })()"
 
 
+def screencast(ws, seconds):
+    """Compositor frames of the whole page (DevTools screencast): one event per repaint, so a
+    live MJPEG <img> yields one frame per new image. Returns the frame timestamps (s)."""
+    ws.call('Page.enable')
+    ws.call('Page.startScreencast', format='jpeg', quality=5, maxWidth=96, maxHeight=96, everyNthFrame=1)
+    t0, ts = time.time(), []
+    while time.time() - t0 < seconds:
+        msg = json.loads(ws.recv())
+        if msg.get('method') == 'Page.screencastFrame':
+            p = msg['params']; ts.append(p['metadata']['timestamp'])
+            ws.n += 1; ws.send({'id': ws.n, 'method': 'Page.screencastFrameAck', 'params': {'sessionId': p['sessionId']}})
+    ws.call('Page.stopScreencast')
+    return [t * 1000.0 for t in ts]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--seconds', type=float, default=60)
     ap.add_argument('--select', default='video')
+    ap.add_argument('--screencast', action='store_true', help='measure compositor repaints of the page instead of a <video> element (for MJPEG <img> outputs)')
     ap.add_argument('--stall-ms', type=float, default=250)
     ap.add_argument('--json', help='write raw samples + stats here')
     ap.add_argument('--label', default='', help='free text (engine + settings) echoed in the summary line')
     a = ap.parse_args()
     ws = cdp.WS(cdp.page()['webSocketDebuggerUrl'])
+    if a.screencast:
+        print(f'screencast sampling {a.seconds:.0f}s …', file=sys.stderr)
+        t = screencast(ws, a.seconds); pf = []
+        size = 'page'
+        if len(t) < 3:
+            sys.exit(f'only {len(t)} repaints in {a.seconds}s — is anything moving on the page?')
+        return report(a, t, pf, size)
     r = ws.call('Runtime.evaluate', expression=HOOK % json.dumps(a.select), returnByValue=True)
     v = r.get('result', {}).get('result', {}).get('value')
     if not isinstance(v, str) or not v.startswith('OK'):
@@ -50,6 +73,10 @@ def main():
     t, pf = json.loads(r['result']['result']['value'])
     if len(t) < 3:
         sys.exit(f'only {len(t)} frames presented in {a.seconds}s — is the stream running?')
+    report(a, t, pf, size)
+
+
+def report(a, t, pf, size):
     d = [b - x for x, b in zip(t, t[1:])]
     span = (t[-1] - t[0]) / 1000.0
     ds = sorted(d)
