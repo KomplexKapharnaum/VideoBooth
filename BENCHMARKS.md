@@ -106,7 +106,26 @@ useless for fps or latency baselines — those wait for the Brio 4K (week of 202
 
 ## Engine B — StreamDiffusion (SD1.5-LCM + depth ControlNet + TensorRT)
 
-_pending_
+### 2026-09-04 14:02 — first baseline, synthetic source (engine-side, no browser)
+Config `engines/b-streamdiffusion/booth_sd15_depth.yaml` @ `bb1c821`: `SimianLuo/LCM_Dreamshaper_v7`,
+512x768, `t_index_list: [24]` (1 step), `guidance_scale 1.0`, `delta 0.7`, `seed 42`, tiny VAE,
+TensorRT (torch 2.8.0+cu128, TensorRT 10.12.0.36, fork `4c90d9e` with its custom diffusers),
+depth ControlNet `control_v11f1p_sd15_depth` scale 0.9 via `depth_tensorrt` (Depth Anything V2
+small, 518², fp16). Driver 595.84, kernel 6.17.0-1032-oem. Source: `tools/engine_b_probe.py
+--source lavfi` (testsrc2 pattern, white flash every 5 s), 90 s after a 15 s warm-up. Other GPU
+tenants NOT stopped (whisper worker idle at 2.4 GB) — a show-mode run will follow.
+
+| date | label | source | fps | frame interval mean / p95 / max | stdev | stalls | latency (engine-side, flash) |
+|---|---|---|---|---|---|---|---|
+| 2026-09-04 14:02 | B baseline SD1.5-LCM 512x768 1step depthTRT 0.9 | lavfi 512x768 | **28.4 fps** | 35.2 / 65.2 / 112.3 ms | 14.9 ms | 0 > 250 ms (2557 frames) | **0.105 s** (min 0.031 / max 0.161 / sd 0.023, n=27) |
+
+Reading: fps is 2.8× the ≥10 fps target and the latency spread is 23 ms — both far inside the
+brief's constraints. The p95 at 65 ms vs p50 at 30 ms hints at a bimodal frame time (TensorRT
+depth preprocessor on the default CUDA stream: the runtime warns about extra
+`cudaStreamSynchronize`); to look at when tuning. Not yet measured: the browser path (kiosk
+Chromium on the same GPU) and glass-to-glass; the synthetic source is not a person.
+First-run build times: UNet+ControlNet TensorRT engine 203 s, VAE encoder/decoder ~20 s each,
+ControlNet engine ~1 min; cached under `.engines/trt/`.
 
 ## Engine A — Scope (LongLive / SDV2, VACE depth)
 

@@ -100,7 +100,7 @@ def ffmpeg_cmd(source, w, h, fps, flash_period, flash_len):
     base = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin']
     if source == 'lavfi':
         vf = (f"drawbox=x=0:y=0:w=iw:h=ih:color=white:t=fill:enable='lt(mod(t\\,{flash_period})\\,{flash_len})'")
-        inp = ['-f', 'lavfi', '-i', f'testsrc2=size={w}x{h}:rate={fps}']
+        inp = ['-re', '-f', 'lavfi', '-i', f'testsrc2=size={w}x{h}:rate={fps}']   # -re: real-time pace, not as-fast-as-possible
     elif source.startswith('v4l2:'):
         inp = ['-f', 'v4l2', '-input_format', 'mjpeg', '-framerate', str(fps), '-i', source[5:]]
         vf = f'scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}'
@@ -151,7 +151,7 @@ def brightness(jpeg):
 class Sink(threading.Thread):
     def __init__(self, url):
         super().__init__(daemon=True)
-        self.url = url; self.t = []; self.bright = []; self.sizes = []; self.err = None; self.first_at = None
+        self.url = url; self.t = []; self.bright = []; self.sizes = []; self.err = None; self.first_at = None; self.last = None
 
     def run(self):
         try:
@@ -173,7 +173,7 @@ class Sink(threading.Thread):
                     now = time.perf_counter()
                     if self.first_at is None:
                         self.first_at = now
-                    self.t.append(now); self.sizes.append(len(jpeg))
+                    self.t.append(now); self.sizes.append(len(jpeg)); self.last = jpeg
                     self.bright.append(brightness(jpeg))
         except Exception as ex:  # noqa: BLE001
             self.err = repr(ex)
@@ -198,6 +198,7 @@ def main():
     ap.add_argument('--build-timeout', type=float, default=2400, help='seconds to wait for the first output frame (engine build)')
     ap.add_argument('--label', default='')
     ap.add_argument('--json', help='write raw samples + stats here')
+    ap.add_argument('--save-frames', metavar='PREFIX', help='save the last input/output JPEG pair as PREFIX_in.jpg / PREFIX_out.jpg')
     a = ap.parse_args()
     w, h = (int(x) for x in a.size.split('x'))
     host = a.server.split('//', 1)[1]
@@ -228,6 +229,7 @@ def main():
     print('connected; first /api/stream call builds the pipeline (TensorRT engines: minutes) …', file=sys.stderr)
 
     sent_t, sent_b = [], []          # send time + brightness of each frame we pushed
+    last_in = None
     start = time.perf_counter(); last_report = start
     while True:
         try:
@@ -242,7 +244,7 @@ def main():
             continue
         st = msg.get('status')
         if st == 'send_frame':
-            jpeg = src.get()
+            jpeg = src.get(); last_in = jpeg
             ws.send_json({'status': 'next_frame'}); ws.send_json(params); ws.send_bytes(jpeg)
             sent_t.append(time.perf_counter()); sent_b.append(brightness(jpeg))
         elif st in ('timeout', 'error'):
@@ -303,6 +305,11 @@ def main():
     if a.json:
         with open(a.json, 'w') as f:
             json.dump(dict(stats=stats, out_t=sink.t, out_bright=sink.bright, sent_t=sent_t, sent_bright=sent_b), f)
+    if a.save_frames and last_in and sink.last:
+        for suffix, data in (('_in.jpg', last_in), ('_out.jpg', sink.last)):
+            with open(a.save_frames + suffix, 'wb') as f:
+                f.write(data)
+        print(f'saved {a.save_frames}_in.jpg / _out.jpg', file=sys.stderr)
     print(json.dumps(stats))
     lat_s = (f"{stats['latency_mean_s']} s (min {stats['latency_min_s']} / max {stats['latency_max_s']} / sd {stats['latency_stdev_s']}, n={stats['latency_n']})"
              if lat else 'n/a')
