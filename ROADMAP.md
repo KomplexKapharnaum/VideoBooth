@@ -121,7 +121,8 @@ they differ (see "Deviations").
 
 ### Phase 3 — show hardening (before the festival)
 - [ ] 55" TV attached, portrait, native mode, overscan checked.
-- [ ] `showmode on` rehearsal: cold boot → kiosk up → engine up → picture, no hands.
+- [x] Cold boot verified 2026-09-04 19:00: comes up idle (panel + blank kiosk, engines off,
+      show mode off, tenants running). Show-day sequence from the panel: show mode ON, B.
 - [ ] Stall watchdog: engine restart without touching the kiosk.
 - [ ] Two-hour soak with a moving person; jitter logged.
 

@@ -62,8 +62,9 @@ The box goes back to being the research machine. Leave the kiosk unit enabled or
 
 ## Rehearsal checklist (once, before the festival week)
 
-- [ ] Cold boot → GDM autologin → kiosk on the TV in portrait → engine page loads → picture
-      within 2 min, no hands.
+- [x] Cold boot → GDM autologin → panel up, kiosk blank, engines off, show mode off (verified
+      2026-09-04 19:00: boot unit 8 s after boot, kiosk 12 s). Then, from the panel: show mode
+      ON, engine B → picture within ~1 min. Still to check on the TV in portrait.
 - [ ] `showmode on/off` round trip leaves every other service as it was (`status` before and
       after).
 - [ ] 2-hour soak with a moving person; probe every 30 min; no stall > 250 ms, fps flat.
