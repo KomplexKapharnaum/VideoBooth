@@ -98,6 +98,24 @@ def steps_strength_to_tindex(steps, strength):
     return [min(49, start + int(round(span * i / steps))) for i in range(steps)]
 
 
+def b_rebuild_with(t_index_list):
+    """The fork's TensorRT + ControlNet path cannot change the NUMBER of denoising steps live
+    (batch mismatch → every frame fails, screen goes black; seen 2026-09-04). A step-count change
+    therefore goes through the config: write it, re-upload (pipeline rebuild ~20 s, engines
+    cached), then re-apply the live values."""
+    txt = open(SD_CONFIG).read()
+    txt = re.sub(r'^t_index_list:.*$', 't_index_list: ' + json.dumps(t_index_list) + '   # steps = number of entries; changing the count rebuilds the pipeline', txt, count=1, flags=re.M)
+    if B_LIVE['prompt']:
+        txt = re.sub(r'^prompt:.*$', 'prompt: ' + json.dumps(B_LIVE['prompt']), txt, count=1, flags=re.M)
+    if B_LIVE.get('negative'):
+        txt = re.sub(r'^negative_prompt:.*$', 'negative_prompt: ' + json.dumps(B_LIVE['negative']), txt, count=1, flags=re.M)
+    open(SD_CONFIG, 'w').write(txt)
+    r = try_http(B + '/api/controlnet/upload-config', 'POST', form=('booth_sd15_depth.yaml', txt.encode()), timeout=60)
+    threading.Thread(target=_b_reapply_after_rebuild, daemon=True).start()
+    log(f'step count → {len(t_index_list)}: pipeline rebuild (~20 s)')
+    return {'rebuild': True, 't_index_list': t_index_list, 'upload': r if isinstance(r, dict) and 'error' in r else 'ok'}
+
+
 def b_apply_params(p):
     out = {}
     body = {}
@@ -107,6 +125,14 @@ def b_apply_params(p):
         cur = B_LIVE['params']
         st = p.get('steps', cur.get('steps', 1)); sg = p.get('strength', cur.get('strength', 0.5))
         body['t_index_list'] = steps_strength_to_tindex(st, sg); B_LIVE['params'].update(steps=st, strength=sg)
+    if 't_index_list' in body:
+        st_now = b_state(); cur_list = st_now.get('t_index_list') if isinstance(st_now, dict) else None
+        if cur_list and len(cur_list) != len(body['t_index_list']):
+            rest = {k: v for k, v in p.items() if k not in ('steps', 'strength', 't_index_list')}
+            out['params'] = b_rebuild_with(body['t_index_list'])
+            if rest:
+                out.update(b_apply_params(rest))
+            return out
     for k in ('guidance_scale', 'delta', 'seed', 'num_inference_steps'):
         if k in p and p[k] is not None:
             body[k] = p[k]
@@ -570,7 +596,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             if p == '/api/preset/apply':   r = apply_preset(body['name'], body.get('engine', 'B'))
             elif p == '/api/b/prompt':     r = b_apply_prompt(body['prompt']); log('B prompt: ' + body['prompt'][:60])
             elif p == '/api/b/negative':   r = b_apply_negative(body.get('negative', '')); log('B negative → rebuild')
-            elif p == '/api/b/params':     r = b_apply_params(body)
+            elif p == '/api/b/params':     r = b_apply_params(body); (log('B params → rebuild (step count)') if isinstance(r.get('params'), dict) and r['params'].get('rebuild') else None)
             elif p == '/api/b/flicker':    FLICKER.update(on=bool(body.get('on')), ms=int(body.get('ms', 150))); r = dict(FLICKER)
             elif p == '/api/a/prompt':     r = a_params({'prompts': [{'text': body['prompt'], 'weight': 1.0}]}); log('A prompt: ' + body['prompt'][:60])
             elif p == '/api/a/params':     r = a_params(body)
