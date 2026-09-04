@@ -124,6 +124,13 @@ tenants NOT stopped (whisper worker idle at 2.4 GB) — a show-mode run will fol
 
 | 2026-09-04 14:16 | B **browser path**: kiosk Chromium (snap, GPU-accelerated) is camera source + display, same config | webcam 15 fps via getUserMedia 1024² → websocket | **26 fps** shown by the page = server `/api/fps` 25.8 | compositor repaints 56.9/s, 17.6 / 33.5 / 118 ms — conflates the input preview `<video>` and the output `<img>`, so NOT the output frame time | 10.9 ms | 0 | not measured (needs an output-only page) |
 
+| 2026-09-04 14:25 | B **kiosk output-only page** (`kiosk/www/output.html`, camera cover-cropped to 512x768, webcam15) | getUserMedia 1600x1080 → websocket | **33.4 presented fps** (screencast: only the output repaints) = server 33.4 | 29.9 / 45.1 / 50.5 ms | 9.2 ms | 0 (60 s) | not measured |
+
+The output-only page is the visitor path: **33 frames per second actually presented on the
+panel, max interval 50 ms, no stall** — the browser adds nothing measurable to the engine's
+own rate at this camera size (the demo UI's 26 fps came from its 1024² capture and its
+controls repainting).
+
 The browser loop costs ~10 fps vs the engine probe (26 vs 37): the page encodes 1024² JPEGs
 per frame and pulls MJPEG back, single-threaded JS. Still 2.6× the target. An output-only
 kiosk page (planned) is what makes the presented output frame time measurable
