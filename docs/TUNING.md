@@ -15,7 +15,7 @@ pipeline (~20 s black).
 | Dial | Effect | Engine B (StreamDiffusion) | Engine A (Scope) |
 |---|---|---|---|
 | **Depth control scale** | how hard the pose is locked. 1.0 = anatomy follows the depth map; < 1.0 = pose still readable, anatomy free to go wrong — **the best "borderline" dial** | UI ControlNet strength; yaml `controlnets[0].conditioning_scale` (0.8–1.0 baseline) | VACE scale (0.8–0.9 baseline) |
-| **Steps** | more steps = cleaner, slower | number of entries in `t_index_list` (1 = one step); UI where exposed | steps setting |
+| **Steps** | more steps = cleaner, slower | number of entries in `t_index_list` — **not live on B**: the TensorRT + ControlNet path cannot change the count without a pipeline rebuild (~20 s black); the panel rebuilds for you. Keep 1 for shows | `denoising_step_list` (live; block cadence unchanged) |
 | **Strength / denoise** | how far from the camera pixels | the *values* in `t_index_list`: lower index = more noise = stronger change (`[24]` ≈ 0.5 one-step, `[18, 32]` two-step) | v2v strength |
 | **Seed lock** | fixed seed = calm; per-frame seed = flicker as texture | `seed` fixed / UI seed | seed |
 | **Negative prompt** | safety terms ALWAYS stay; aesthetic terms ("ugly, deformed") on = clean, off = freaky | `negative_prompt` (live with the booth patch) | negative prompt |

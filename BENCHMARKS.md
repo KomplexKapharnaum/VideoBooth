@@ -142,6 +142,11 @@ numbers show: **~27 ms per frame at 512x768, 1 step, depth ControlNet** on the 4
 run's 28 fps / 15 ms stdev was with the synthetic source running unpaced (ffmpeg flat out on the
 CPU next to the server); paced, the interval stdev falls to 7 ms.
 
+Limitation found 2026-09-04 (panel test): changing the **number** of denoising steps live
+breaks the TensorRT + ControlNet path (batch mismatch, every frame fails → black screen); the
+values of `t_index_list` (strength) change live, the count needs a pipeline rebuild (~20 s).
+The panel does the rebuild automatically; the default presets are all one step.
+
 Reading: fps is 2.8× the ≥10 fps target and the latency spread is 23 ms — both far inside the
 brief's constraints. The p95 at 65 ms vs p50 at 30 ms hints at a bimodal frame time (TensorRT
 depth preprocessor on the default CUDA stream: the runtime warns about extra

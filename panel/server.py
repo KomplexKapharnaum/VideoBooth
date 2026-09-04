@@ -137,7 +137,8 @@ def b_apply_params(p):
         if k in p and p[k] is not None:
             body[k] = p[k]
     if body:
-        out['params'] = try_http(B + '/api/params', 'POST', body); B_LIVE['params'].update({k: v for k, v in body.items()})
+        out['params'] = try_http(B + '/api/params', 'POST', body)
+        B_LIVE['params'].update({k: v for k, v in body.items() if k != 't_index_list'})   # steps/strength are the source; a stored list would go stale
     if 'control_scale' in p and p['control_scale'] is not None:
         out['control'] = try_http(B + '/api/controlnet/update-strength', 'POST', {'index': 0, 'strength': float(p['control_scale'])})
         B_LIVE['control_scale'] = float(p['control_scale'])
