@@ -11,20 +11,28 @@ cd /ai/VideoBooth && setup/00_audit.sh          # read-only report, paste into B
 ```
 
 ## 1. Driver repair + reboot (root) — REQUIRED before anything touches the GPU
-State on 2026-09-04: userspace 580.173 vs loaded module 580.159, and no NVIDIA module on
-disk for the kernel grub boots by default. Do not reboot without this.
+Root cause (2026-09-04): the signed NVIDIA module packages link their `.ko` at install
+time (`latelink=true`) and need `linux-headers-<kver>`; the newest OEM kernel (grub
+default) had none, so it has no NVIDIA module, and unattended-upgrades moved the userspace
+ahead of the loaded module. Do not reboot without this. Secure Boot is on: the script
+installs explicit signed packages, never `nvidia-driver-*` (that pulls DKMS).
 ```bash
-sudo /ai/VideoBooth/setup/01_driver_fix.sh      # verifies module == userspace, blacklists auto-upgrades
-sudo reboot                                     # or: sudo …/01_driver_fix.sh --reboot
+# recommended: NVIDIA production branch 595, open kernel modules (ubuntu-drivers' pick for RTX 40)
+sudo /ai/VideoBooth/setup/01_driver_fix.sh --driver 595-open
+sudo reboot                                     # reboot right away: the loaded 580 module no longer matches the new userspace
+# alternative: stay on 580.173 (headers + finish configure only)
+sudo /ai/VideoBooth/setup/01_driver_fix.sh
+sudo reboot
 # after reboot
 nvidia-smi && mount | grep /mnt/models && docker ps --format '{{.Names}} {{.Status}}'
 ```
+Fallback if 595 misbehaves: `sudo setup/01_driver_fix.sh --driver 580` reinstalls the 580 set.
 Side effects of the reboot: Clément's Clown stack restarts by docker policy, VoiceClone and
 gpu-swap by cron @reboot, NFS hard mounts come back by themselves (July precedent).
 
 ## 2. System prerequisites (root)
 ```bash
-sudo /ai/VideoBooth/setup/02_root_prereqs.sh    # Chrome (Google apt), build deps, v4l-utils, video group, GDM autologin kxkm
+sudo /ai/VideoBooth/setup/02_root_prereqs.sh    # Chromium snap (refresh held, camera plug), build deps, v4l-utils, video group, GDM autologin kxkm; --chrome for Google Chrome instead
 ```
 `--no-autologin` keeps the login screen (then start the kiosk by hand from the desktop).
 Log out / in once for the `video` group.
@@ -67,6 +75,6 @@ tools/showmode.sh off                           # restores exactly what "on" sto
 | 7860 | Engine B UI (StreamDiffusion demo) |
 |---|---|
 | 8000 | Engine A UI (Scope) |
-| 9222 | kiosk Chrome DevTools (localhost, for the probes) |
+| 9222 | kiosk Chromium DevTools (localhost, for the probes) |
 
 Never expose 7860/8000 beyond the LAN / tailnet.

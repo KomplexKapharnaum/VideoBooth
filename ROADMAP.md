@@ -6,10 +6,10 @@ short constant delay. Brief and rules: [CLAUDE.md](CLAUDE.md). Install:
 [INSTALL.md](INSTALL.md). Measurements: [BENCHMARKS.md](BENCHMARKS.md).
 
 ```
-Brio 4K ─USB─▶ kiosk Chrome (getUserMedia) ─WebRTC─▶ engine server (Scope :8000 | StreamDiffusion :7860)
+Brio 4K ─USB─▶ kiosk Chromium (getUserMedia) ─WebRTC─▶ engine server (Scope :8000 | StreamDiffusion :7860)
                      ▲                                        │ depth preprocessor + diffusion, 1–2 steps
                      └────────── WebRTC output ◀──────────────┘
-              same Chrome, --kiosk, portrait 55" on the 4090's HDMI
+              same Chromium, --kiosk, portrait 55" on the 4090's HDMI
    technician: the engine's own web UI from a laptop on the LAN / tailnet (dials, presets, reset)
 ```
 
@@ -23,12 +23,18 @@ they differ (see "Deviations").
 
 - **Repo created**, brief reviewed, scripts and configs drafted — **nothing run on the
   GPU yet**.
-- **Blocker 0 — driver**: kxkm-ai's NVIDIA userspace was auto-upgraded to 580.173.02
-  on 2026-08-16 while the running kernel module (6.17.0-1028-oem) is 580.159.03 →
-  `nvidia-smi` fails with "Driver/library version mismatch". The newest installed
-  kernel (6.17.0-1032-oem, grub default) has **no NVIDIA module on disk** although its
-  module package is marked installed. A plain reboot = dead GPU. Fix =
-  `setup/01_driver_fix.sh` (root, Thomas), then reboot.
+- **Blocker 0 — driver (root cause found 2026-09-04 pm)**: Ubuntu's signed NVIDIA
+  module packages link their `.ko` at install time on this box (`latelink=true`) and
+  need `linux-headers-<kver>`; the headers were never installed for the newest OEM
+  kernel (6.17.0-1032, grub default), so its module package is stuck half-configured
+  with no `nvidia.ko`, while unattended-upgrades moved the userspace to 580.173.02
+  against a loaded 580.159.03 → `nvidia-smi` mismatch, and a plain reboot = dead GPU.
+  The first `01_driver_fix.sh` failed on exactly that missing header. Fix =
+  `setup/01_driver_fix.sh` (headers + configure), recommended with `--driver 595-open`
+  (NVIDIA production branch 595, Ubuntu-recommended open modules for RTX 40, signed
+  LRM packages, no DKMS), then reboot. Thomas runs it (root).
+- **Show = IMA-Niort, 2026-09-24, Niort** (Thomas, 2026-09-04): non-commercial demo.
+  Three weeks. Hub project [[ima-niort-2026]] carries the date.
 - Camera: Brio 4K ordered, due week of 2026-09-07. A cheap USB webcam is already on
   `/dev/video0` for the pipeline bench.
 - Display: 27" 4K desk monitor on HDMI-A-2 today; the 55" TV is not attached yet.
@@ -39,7 +45,7 @@ they differ (see "Deviations").
    `/ai/VideoBooth`. Other tenants (ComfyUI, hub whisper worker, VoiceClone, kokoro
    TTS, LLM launchers) stay installed; `tools/showmode.sh on|off` stops them for a show
    and restores exactly what it stopped. Kiosk = GDM autologin of `kxkm` + a systemd
-   user unit running Google Chrome `--kiosk`.
+   user unit running Chromium (snap) `--kiosk`.
 2. **Root work is Thomas's.** `setup/01_driver_fix.sh` and `setup/02_root_prereqs.sh`
    are run by him with sudo; everything else runs as `kxkm`.
 3. **Repo** `KomplexKapharnaum/VideoBooth`, public, GPL-3. Hub project `videobooth`
@@ -49,8 +55,11 @@ they differ (see "Deviations").
 5. **Two engines, decided by measurement** (brief §4): Scope (LongLive + VACE depth)
    vs the Daydream StreamDiffusion fork (SD1.5-LCM + depth ControlNet + TensorRT).
    Score latency constancy > fps > look. One engine after `DECISION.md`.
-6. **Browser-centric I/O.** Both engines take the camera from the browser page and
-   return video over WebRTC. The kiosk Chrome on kxkm-ai is both camera source and
+6. **Browser = Chromium** (Canonical snap, refresh held, camera plug) — Thomas
+   2026-09-04; Google Chrome stays a `--chrome` fallback in the prereqs script if the
+   snap's confinement bites in Phase 1 (HKiosk's experience).
+7. **Browser-centric I/O.** Both engines take the camera from the browser page and
+   return video over WebRTC. The kiosk Chromium on kxkm-ai is both camera source and
    display; the technician drives the engine UI from another machine. A remote LAN
    display is a bonus (Scope: NDI out; either: a second browser), never the primary.
 
@@ -60,11 +69,11 @@ they differ (see "Deviations").
 |---|---|
 | Host | kxkm-ai · i7-14700KF 28 threads · 62 GB RAM · RTX 4090 24 GB · NVMe 1.8 TB, 937 GB free |
 | OS | Ubuntu 24.04.4 · kernel 6.17.0-1028-oem running, 6.17.0-1032-oem installed (grub default) · Secure Boot ON (Ubuntu-signed NVIDIA modules, no DKMS) |
-| NVIDIA | module 580.159.03 loaded · userspace 580.173.02 · CUDA toolkit apt 12.0 (unused; wheels bring their own) |
+| NVIDIA | module 580.159.03 loaded · userspace 580.173.02 · signed LRM packages with `latelink=true` (headers required per kernel; never `nvidia-driver-*` meta = DKMS) · apt offers 580 / 595 / 610, `ubuntu-drivers` recommends 595-open · CUDA toolkit apt 12.0 (unused) |
 | Access | `ssh kxkm-ai` = kxkm@100.87.54.119 (tailscale, Thomas's tailnet) · LAN 10.2.0.237 · sudo needs a password |
 | Desktop | GDM + Xorg (Wayland disabled), `AutomaticLogin=kxkm` present but disabled · nobody logged in · gnome-remote-desktop service present, RDP disabled |
 | Display | HDMI-A-2 connected: Samsung LS27D80xE, 3840×2160 · four other outputs free |
-| Tooling | Python 3.12, uv (`~/.local/bin`), Node 22 (nvm + apt), Docker + nvidia runtime, ffmpeg, v4l-utils, Firefox snap only (no Chrome/Chromium) |
+| Tooling | Python 3.12, uv (`~/.local/bin`), Node 22 (nvm + apt), Docker + nvidia runtime, ffmpeg, v4l-utils, Firefox snap only (no Chromium yet) |
 | Camera now | Z-Star "Venus USB2.0 Camera" on `/dev/video0` (+ video1 metadata node); `kxkm` is NOT in the `video` group |
 | GPU tenants | ComfyUI2 :8188 (user unit `kxkm-comfyui`, VRAM unload cron every 5 min) · docker `gpu-worker` (whisper for hub37, polls every 3 s) · VoiceClone :7865 (tmux `voiceclone`, cron @reboot) · `kokoro-tts` user unit :9211 · gpu-swap uvicorn :18890 (LLM launcher, cron @reboot) · many inactive LLM user units |
 | Models on disk | `/ai/data/models`: SD1.5 depth ControlNet, OpenPose CN, LCM Dreamshaper v7, SD-Turbo, SDXL-Lightning 1/2/4-step, DreamshaperXL turbo; TensorRT Depth-Anything engines (ComfyUI's) |
@@ -74,9 +83,10 @@ they differ (see "Deviations").
 ## Phases
 
 ### Phase 0 — machine ready (this week, Thomas + dev37)
-- [ ] `setup/01_driver_fix.sh` run as root → NVIDIA module 580.173 present for
-      6.17.0-1032 → reboot → `nvidia-smi` green, NFS mounts back, Clown stack up.
-- [ ] `setup/02_root_prereqs.sh` → Chrome, build deps, `video` group, GDM autologin,
+- [ ] `setup/01_driver_fix.sh --driver 595-open` run as root → headers installed, signed
+      595.84 module for 6.17.0-1032, 580 removed → reboot → `nvidia-smi` green, NFS
+      mounts back, Clown stack up.
+- [ ] `setup/02_root_prereqs.sh` → Chromium snap (refresh held), build deps, `video` group, GDM autologin,
       unattended-upgrades blacklist for nvidia/kernel.
 - [ ] `setup/00_audit.sh` report filed in BENCHMARKS.md (header block).
 
@@ -130,7 +140,7 @@ second GPU only if measured fps demands it.
   blacklist in `02_root_prereqs.sh`; a show-week freeze is still Thomas's call.
 - **Scope is alpha**, weekly changes; pin the commit that passes the bench in
   `setup/env.sh` (`SCOPE_REF`) and never update during show week.
-- **VRAM**: LongLive ~20 GB + depth preprocessor ~1 GB + Chrome on the same GPU. Show
+- **VRAM**: LongLive ~20 GB + depth preprocessor ~1 GB + Chromium on the same GPU. Show
   mode must leave the GPU empty; `nvidia-smi` is checked by `showmode status`.
 - **Brio at 1080p30**: MJPEG or YUY2 — the browser decodes; if CPU decode jitters,
   drop the capture to 720p (generation input is ≤ 576p anyway).
@@ -143,7 +153,6 @@ second GPU only if measured fps demands it.
 
 ## Open items
 
-- Festival name and date → hub `events:`.
 - 55" TV model / native resolution / HDMI cable length (4K60 over a long run?).
 - Reboot window for the driver fix (Clément's bot restarts, whisper worker idle).
 - Whether `kxkm-comfyui` should be re-enabled after each show automatically

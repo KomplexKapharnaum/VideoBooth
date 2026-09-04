@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
-# booth-kiosk.sh — configure the HDMI output (portrait) and run Google Chrome in kiosk mode
+# booth-kiosk.sh — configure the HDMI output (portrait) and run Chromium (or Chrome) in kiosk mode
 # on the engine's output page, forever (restarts the browser if it exits).
 # Runs inside the kxkm graphical session (systemd user unit booth-kiosk.service).
 set -uo pipefail
 . "$(dirname "$0")/../setup/env.sh"
 export DISPLAY=${DISPLAY:-:0}
-CHROME=$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || true)
-[ -n "$CHROME" ] || { echo "no Chrome/Chromium (setup/02_root_prereqs.sh)"; exit 1; }
-PROFILE=$BOOTH_STATE/chrome-kiosk; mkdir -p "$PROFILE"
+CHROME=$(command -v chromium || command -v chromium-browser || command -v google-chrome-stable || command -v google-chrome || true)
+[ -n "$CHROME" ] || { echo "no Chromium/Chrome (setup/02_root_prereqs.sh)"; exit 1; }
+# The Chromium snap can only write inside $HOME/snap/chromium/… (and non-hidden $HOME paths),
+# so the kiosk profile lives there; Chrome (deb) can use the repo's .state dir.
+case "$CHROME" in
+  */chromium*) PROFILE=$HOME/snap/chromium/common/booth-kiosk ;;
+  *)           PROFILE=$BOOTH_STATE/chrome-kiosk ;;
+esac
+mkdir -p "$PROFILE"
 
 # Display: no blanking, native mode (or KIOSK_MODE), portrait rotation.
 xset s off; xset s noblank; xset -dpms 2>/dev/null || true
@@ -19,7 +25,7 @@ if [ -n "$OUT" ]; then
 fi
 command -v unclutter >/dev/null && pgrep -x unclutter >/dev/null || unclutter --timeout 1 --fork 2>/dev/null || true
 
-# Chrome flags: kiosk + camera auto-grant (verified on Chrome 149, HNdi 2026-09-04) +
+# Chromium flags: kiosk + camera auto-grant (verified on Chrome 149, HNdi 2026-09-04) +
 # DevTools port for tools/fps_probe.py. 127.0.0.1 is a secure context, getUserMedia works.
 while true; do
   rm -f "$PROFILE/SingletonLock" 2>/dev/null
@@ -29,5 +35,5 @@ while true; do
     --overscroll-history-navigation=0 --check-for-update-interval=31536000 \
     --remote-debugging-port="$CDP_PORT" --user-data-dir="$PROFILE" "$KIOSK_URL" \
     >> "$BOOTH_LOGS/kiosk.log" 2>&1
-  echo "chrome exited ($?), restarting in 2 s" >> "$BOOTH_LOGS/kiosk.log"; sleep 2
+  echo "browser exited ($?), restarting in 2 s" >> "$BOOTH_LOGS/kiosk.log"; sleep 2
 done

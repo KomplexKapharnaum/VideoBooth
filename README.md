@@ -6,7 +6,7 @@ with a short, constant delay. One machine (RTX 4090), one camera (Logitech Brio 
 browser in kiosk mode, and a diffusion engine picked by measurement.
 
 ```
-Brio 4K ─USB─▶ kiosk Chrome (camera + display, --kiosk, portrait 55")
+Brio 4K ─USB─▶ kiosk Chromium (camera + display, --kiosk, portrait 55")
                   │ WebRTC                       ▲ WebRTC
                   ▼                              │
         engine server on the same 4090: Scope (:8000)  or  StreamDiffusion (:7860)
@@ -39,6 +39,6 @@ Brio 4K ─USB─▶ kiosk Chrome (camera + display, --kiosk, portrait 55")
 ## Repo map
 `setup/` install scripts (00 audit · 01 driver fix · 02 prereqs · 10 engine B · 20 engine A · 99 verify) ·
 `tools/` show mode, camera check, fps/jitter probe, latency protocol ·
-`kiosk/` Chrome kiosk + systemd user unit · `engines/` per-engine config, run script and dial map.
+`kiosk/` Chromium kiosk + systemd user unit · `engines/` per-engine config, run script and dial map.
 
 License: GPL-3.0. Engines keep their own licenses (Scope CC BY-NC-SA 4.0, StreamDiffusion Apache-2.0).

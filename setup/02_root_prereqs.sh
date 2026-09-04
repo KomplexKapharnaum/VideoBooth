@@ -1,23 +1,35 @@
 #!/usr/bin/env bash
-# 02_root_prereqs.sh — ROOT, idempotent. System packages, Chrome, video group, GDM autologin.
-# Run:  sudo /ai/VideoBooth/setup/02_root_prereqs.sh [--user kxkm] [--no-autologin]
+# 02_root_prereqs.sh — ROOT, idempotent. System packages, Chromium (snap), video group, GDM autologin.
+# Run:  sudo /ai/VideoBooth/setup/02_root_prereqs.sh [--user kxkm] [--no-autologin] [--chrome]
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run as root (sudo)"; exit 1; }
-BOOTH_USER=${SUDO_USER:-kxkm}; AUTOLOGIN=1
-while [ $# -gt 0 ]; do case "$1" in --user) BOOTH_USER=$2; shift;; --no-autologin) AUTOLOGIN=0;; *) echo "unknown arg $1"; exit 2;; esac; shift; done
+BOOTH_USER=${SUDO_USER:-kxkm}; AUTOLOGIN=1; BROWSER=chromium
+while [ $# -gt 0 ]; do case "$1" in --user) BOOTH_USER=$2; shift;; --no-autologin) AUTOLOGIN=0;; --chrome) BROWSER=chrome;; *) echo "unknown arg $1"; exit 2;; esac; shift; done
 export DEBIAN_FRONTEND=noninteractive
 
-# Google Chrome from Google's apt repo (Ubuntu's chromium is a snap whose confinement
-# breaks kiosk mode and camera access — same choice as Hemisphere's HKiosk).
-if ! command -v google-chrome-stable >/dev/null; then
-  install -d /etc/apt/keyrings
-  curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
-  echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
-fi
 apt-get update -qq
-apt-get install -y google-chrome-stable git curl jq tmux build-essential ninja-build python3-dev \
+apt-get install -y git curl jq tmux build-essential ninja-build python3-dev \
   v4l-utils ffmpeg x11-xserver-utils xdotool unclutter-xfixes edid-decode
 echo "OK: packages"
+
+# Browser. Default: Chromium — on Ubuntu 24.04 that is the Canonical snap (no deb exists).
+# Kiosk needs: refresh held (no mid-show auto-update), camera plug connected, profile inside
+# the snap's writable area (kiosk/booth-kiosk.sh handles the path). --chrome installs Google
+# Chrome from Google's apt repo instead (HKiosk's choice; fallback if the snap misbehaves).
+if [ "$BROWSER" = chromium ]; then
+  snap list chromium >/dev/null 2>&1 || snap install chromium
+  snap refresh --hold chromium >/dev/null 2>&1 && echo "OK: chromium snap, refresh held" || echo "WARN: could not hold chromium refresh (old snapd?)"
+  snap connect chromium:camera 2>/dev/null || true
+  snap connections chromium 2>/dev/null | grep -E "^(camera|removable-media|home) " | sed 's/^/      /'
+else
+  if ! command -v google-chrome-stable >/dev/null; then
+    install -d /etc/apt/keyrings
+    curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+    apt-get update -qq
+  fi
+  apt-get install -y google-chrome-stable && echo "OK: google-chrome-stable"
+fi
 
 # Camera access for services started outside a seat session (systemd --user, ssh).
 id -nG "$BOOTH_USER" | grep -qw video || usermod -aG video "$BOOTH_USER"

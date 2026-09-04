@@ -1,50 +1,88 @@
 #!/usr/bin/env bash
-# 01_driver_fix.sh — ROOT. Repairs the NVIDIA driver state of kxkm-ai before a reboot.
+# 01_driver_fix.sh — ROOT. Put the NVIDIA driver of kxkm-ai in a known-good, reboot-safe state.
 #
-# Situation found 2026-09-04: userspace auto-upgraded to 580.173.02, running module
-# 580.159.03 (NVML "Driver/library version mismatch"), and the newest installed OEM
-# kernel — the one grub boots by default — has NO nvidia module on disk although its
-# module package is marked installed. This script:
-#   1. (re)installs the signed module trio for the newest kernel and verifies that the
-#      module version on disk == the userspace version,
-#   2. blacklists nvidia/kernel packages from unattended-upgrades so it cannot recur,
-#   3. prints the reboot command (adds --reboot to do it now).
-# Idempotent. Aborts (no reboot hint) if the verification fails.
+# Root cause found 2026-09-04: Ubuntu's signed NVIDIA module packages (linux-modules-nvidia-*)
+# LINK the .ko files at install time on this box (/etc/default/linux-modules-nvidia:
+# latelink=true), which needs the matching linux-headers-<kver>. Headers were never
+# installed for the newest OEM kernel (grub default), so its module package sits
+# "half-configured" with no nvidia.ko on disk, while unattended-upgrades already moved the
+# userspace to a newer 580 build than the loaded module → NVML mismatch. A plain reboot
+# would boot a kernel without any NVIDIA module.
 #
-# Run:  sudo /ai/VideoBooth/setup/01_driver_fix.sh [--reboot] [--kernel <kver>]
+# Secure Boot is ON: only Canonical-signed modules load. Never install nvidia-driver-<N>
+# meta-packages here — they pull nvidia-dkms-<N>, whose unsigned module would shadow the
+# signed one (/lib/modules/*/updates/dkms wins in depmod). This script installs the explicit
+# package set instead.
+#
+# Modes:
+#   sudo setup/01_driver_fix.sh                 keep the 580 branch: headers + finish configure
+#   sudo setup/01_driver_fix.sh --driver 595-open   switch to the current NVIDIA production
+#                                               branch (595, open kernel modules — Ubuntu's
+#                                               `ubuntu-drivers` recommendation for RTX 40)
+#   options: --kernel <kver> (default: newest installed)  --reboot (reboot when verified)
+# Idempotent. Verifies module-on-disk == userspace version before printing the reboot hint.
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run as root (sudo)"; exit 1; }
-FLAVOR=580; DO_REBOOT=0; KVER=""
-while [ $# -gt 0 ]; do case "$1" in --reboot) DO_REBOOT=1;; --kernel) KVER=$2; shift;; *) echo "unknown arg $1"; exit 2;; esac; shift; done
+DRIVER=keep; DO_REBOOT=0; KVER=""
+while [ $# -gt 0 ]; do case "$1" in
+  --driver) DRIVER=$2; shift;; --reboot) DO_REBOOT=1;; --kernel) KVER=$2; shift;;
+  *) echo "unknown arg $1"; exit 2;; esac; shift; done
 [ -n "$KVER" ] || KVER=$(ls /boot/vmlinuz-* | sed 's#.*/vmlinuz-##' | sort -V | tail -1)
-USER_VER=$(dpkg-query -W -f='${Version}' nvidia-kernel-common-$FLAVOR | cut -d- -f1)
-mod_ver() { modinfo -k "$KVER" nvidia 2>/dev/null | awk '/^version/{print $2}'; }
-echo "target kernel : $KVER"
-echo "userspace     : $USER_VER"
-echo "module on disk: ${MODV:-$(mod_ver)}"
-if [ "$(mod_ver)" != "$USER_VER" ]; then
-  echo "→ reinstalling signed module packages for $KVER"
-  apt-get update -qq
-  apt-get install --reinstall -y "linux-signatures-nvidia-$KVER" "linux-objects-nvidia-$FLAVOR-$KVER" "linux-modules-nvidia-$FLAVOR-$KVER"
-  depmod -a "$KVER"
-  [ "$(mod_ver)" = "$USER_VER" ] || dpkg-reconfigure "linux-modules-nvidia-$FLAVOR-$KVER" || true
-  depmod -a "$KVER"
-fi
-NOW=$(mod_ver)
-if [ "$NOW" != "$USER_VER" ]; then
-  echo "FAIL: module for $KVER is '${NOW:-missing}', userspace is $USER_VER. Do NOT reboot."
-  echo "Diagnose: ls /lib/modules/$KVER/kernel/nvidia-$FLAVOR ; apt-cache policy linux-modules-nvidia-$FLAVOR-$KVER nvidia-kernel-common-$FLAVOR"
+export DEBIAN_FRONTEND=noninteractive
+echo "target kernel : $KVER   (running: $(uname -r), loaded module: $(cat /sys/module/nvidia/version 2>/dev/null || echo none))"
+
+# 1. Let dpkg settle what it can (the nvidia module configure still fails here — expected),
+#    install the headers for the target kernel, then finish the pending configures.
+dpkg --configure -a || true
+apt-get update -qq
+apt-get install -y "linux-headers-$KVER"
+dpkg --configure -a || true
+
+# 2. Branch.
+case "$DRIVER" in
+  keep)
+    BRANCH=$(ls /lib/modules/"$KVER"/kernel 2>/dev/null | grep -oE 'nvidia-[0-9]+(-open)?' | head -1)
+    BRANCH=${BRANCH#nvidia-}; [ -n "$BRANCH" ] || BRANCH=580
+    echo "keeping branch $BRANCH"
+    apt-get install --reinstall -y "linux-modules-nvidia-$BRANCH-$KVER" || dpkg-reconfigure "linux-modules-nvidia-$BRANCH-$KVER"
+    ;;
+  *-open|[0-9]*)
+    BRANCH=$DRIVER; N=${BRANCH%-open}
+    echo "switching to branch $BRANCH (userspace nvidia-utils-$N + signed modules for $KVER)"
+    apt-get install -y \
+      "nvidia-utils-$N" "libnvidia-gl-$N" "libnvidia-compute-$N" "libnvidia-decode-$N" "libnvidia-encode-$N" \
+      "libnvidia-extra-$N" "libnvidia-cfg1-$N" "libnvidia-fbc1-$N" "nvidia-compute-utils-$N" \
+      "nvidia-kernel-common-$N" "nvidia-kernel-source-$BRANCH" "xserver-xorg-video-nvidia-$N" \
+      "linux-modules-nvidia-$BRANCH-$KVER" "linux-modules-nvidia-$BRANCH-oem-24.04"
+    apt-get autoremove -y --purge >/dev/null || true
+    ;;
+esac
+N=${BRANCH%-open}
+depmod -a "$KVER"
+
+# 3. Verify: signed module on disk for $KVER, same version as userspace, no DKMS shadow.
+USER_VER=$(dpkg-query -W -f='${Version}' "nvidia-utils-$N" | cut -d- -f1)
+MOD_VER=$(modinfo -k "$KVER" nvidia 2>/dev/null | awk '/^version/{print $2}')
+SIGNER=$(modinfo -k "$KVER" nvidia 2>/dev/null | awk -F': *' '/^signer/{print $2}')
+MOD_FILE=$(modinfo -k "$KVER" -F filename nvidia 2>/dev/null || true)
+echo "userspace     : $USER_VER (nvidia-utils-$N)"
+echo "module on disk: ${MOD_VER:-missing} ${MOD_FILE:+at $MOD_FILE} signer: ${SIGNER:-none}"
+FAIL=0
+[ -n "$MOD_VER" ] && [ "$MOD_VER" = "$USER_VER" ] || FAIL=1
+case "$MOD_FILE" in */updates/dkms/*) echo "FAIL: an unsigned DKMS module shadows the signed one — remove nvidia-dkms-*"; FAIL=1;; esac
+[ -n "$SIGNER" ] || { echo "FAIL: module is unsigned and Secure Boot is $(mokutil --sb-state 2>/dev/null)"; FAIL=1; }
+if [ "$FAIL" = 1 ]; then
+  echo "FAIL: do NOT reboot. Diagnose: ls /lib/modules/$KVER/kernel/nvidia-$BRANCH ; tail -60 /var/log/apt/term.log ; dpkg -l | grep nvidia"
   exit 3
 fi
-SIGNER=$(modinfo -k "$KVER" nvidia | awk -F': *' '/^signer/{print $2}')
-echo "OK: $KVER has nvidia $NOW (signer: ${SIGNER:-none})"
-[ -n "$SIGNER" ] || echo "WARN: module is unsigned and Secure Boot is $(mokutil --sb-state 2>/dev/null)"
 update-initramfs -u -k "$KVER" >/dev/null 2>&1 || true
+echo "OK: $KVER will load nvidia $MOD_VER (signed) matching userspace $USER_VER"
 
+# 4. Never again by unattended-upgrades.
 BL=/etc/apt/apt.conf.d/51videobooth-nvidia-hold
 cat > "$BL" <<'CONF'
-// VideoBooth (KXKM): never let unattended-upgrades touch the GPU driver or the kernel.
-// An automatic 580.159 → 580.173 userspace upgrade broke the driver on 2026-08-16.
+// VideoBooth (KXKM): unattended-upgrades must not touch the GPU driver or the kernel.
+// A 580.159 → 580.173 userspace auto-upgrade broke the driver on 2026-08-16.
 Unattended-Upgrade::Package-Blacklist {
     "nvidia-";
     "libnvidia-";
@@ -57,9 +95,9 @@ Unattended-Upgrade::Package-Blacklist {
     "linux-generic";
 };
 CONF
-echo "OK: unattended-upgrades blacklist written to $BL"
+echo "OK: unattended-upgrades blacklist at $BL"
 echo
-echo "Reboot to load $KVER + nvidia $NOW:   sudo reboot"
-echo "After reboot check:  nvidia-smi ; mount | grep /mnt/models ; docker ps"
+echo "Reboot into $KVER:   sudo reboot"
+echo "After reboot:        nvidia-smi ; mount | grep /mnt/models ; docker ps --format '{{.Names}} {{.Status}}'"
 [ "$DO_REBOOT" = 1 ] && { echo "rebooting now"; sleep 2; reboot; }
 exit 0

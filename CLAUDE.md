@@ -8,7 +8,8 @@ silently work around them. Plan, status and deviations: `ROADMAP.md`.
 
 ## 1. What we are building
 
-A physical booth at a festival (non-commercial demo, KXKM). A visitor steps
+A physical booth at **IMA-Niort 2026 (Niort, plays 2026-09-24)** — a non-commercial
+demo by KXKM. A visitor steps
 in front of a fixed camera and sees, on a 55" portrait screen 2–3 m away, a
 continuously generated video of a "superhero twin" that copies their pose
 with a short, CONSTANT delay. The delay is part of the experience: people
@@ -55,7 +56,9 @@ only sees the screen.
 
 - Machine: **kxkm-ai** — i7-14700KF, 62 GB RAM, single RTX 4090 24 GB,
   1.8 TB NVMe (≈ 940 GB free). Ubuntu 24.04 LTS, OEM kernel 6.17, NVIDIA
-  580 (Ubuntu signed modules, Secure Boot ON — no DKMS drivers). Reached
+  driver from Ubuntu's signed LRM packages only (Secure Boot ON — no DKMS, never the
+  `nvidia-driver-*` meta; `latelink=true` means every kernel needs its headers);
+  target branch 595-open (NVIDIA production branch). Reached
   over tailscale (`ssh kxkm-ai`, user `kxkm`) or LAN `10.2.0.237`.
   Linux only. Do not propose Windows paths (`WINDOWS.md` = emergency
   fallback, unmaintained).
@@ -69,7 +72,7 @@ only sees the screen.
 - Display: 55" TV on the 4090's HDMI, mounted PORTRAIT (native resolution
   to be confirmed; generation resolution does not change). Today a 27" 4K
   desk monitor is on HDMI-A-2 and serves for the bench. GDM + Xorg,
-  autologin `kxkm`, Google Chrome kiosk (systemd user unit).
+  autologin `kxkm`, Chromium kiosk (snap, systemd user unit).
 - Camera, primary: Logitech Brio 4K (new generation, UVC) on USB, arriving
   week of 2026-09-07. 30 fps, fixed position, fixed framing, person fills
   the portrait frame. Until it arrives the cheap USB webcam already on
@@ -171,7 +174,7 @@ notes. Presets must be switchable from the UI without restart.
 
 ## 8. Use context
 
-Non-commercial: festival demo booth by a non-commercial entity (KXKM).
+Non-commercial: demo booth at IMA-Niort 2026 by a non-commercial entity (KXKM).
 Model or LoRA licenses are not a selection constraint. Public audience
 including children: rule 2.7 applies regardless.
 
@@ -190,7 +193,7 @@ VideoBooth/
                           02 prereqs (root) · 10 engine B · 20 engine A · 99 verify
   tools/                  showmode.sh · camera_check.sh · fps_probe.py (DevTools) ·
                           cdp.py · latency test protocol
-  kiosk/                  Chrome kiosk launcher + systemd user unit + portrait setup
+  kiosk/                  Chromium kiosk launcher + systemd user unit + portrait setup
   engines/a-scope/        Scope notes, settings to use, dial mapping
   engines/b-streamdiffusion/  StreamDiffusion config (depth ControlNet), dial mapping
   presets/heroes.json     technician prompt presets
@@ -202,12 +205,12 @@ single place for paths.
 
 ## 10. Phase 1 — kickoff tasks, in this order, stop after each
 
-0. Driver repair + reboot (Thomas, root): `setup/01_driver_fix.sh`. The
-   userspace driver was auto-upgraded to 580.173 while the running kernel
-   module is 580.159 and the newest installed kernel has NO NVIDIA module
-   on disk. Nothing GPU-related starts before this is green.
+0. Driver repair + reboot (Thomas, root): `setup/01_driver_fix.sh --driver
+   595-open`. Root cause: missing kernel headers for the newest OEM kernel,
+   so the signed module package never built its `.ko`, plus an unattended
+   userspace upgrade. Nothing GPU-related starts before this is green.
 1. Machine audit: `setup/00_audit.sh`. Report; install nothing yet.
-2. Prereqs (Thomas, root): `setup/02_root_prereqs.sh` — Chrome, build
+2. Prereqs (Thomas, root): `setup/02_root_prereqs.sh` — Chromium, build
    deps, `video` group, GDM autologin, unattended-upgrade blacklist.
 3. Camera audit: `tools/camera_check.sh`, first with the USB webcam
    already on the box, again with the Brio when it arrives (30 fps
@@ -224,7 +227,7 @@ single place for paths.
    VACE depth on, re-measure. SDV2 bare once, for the number.
 6. Glass-to-glass latency test for both (`tools/LATENCY.md` protocol).
    Latency mean AND spread → `BENCHMARKS.md`.
-7. Kiosk: `kiosk/` — Chrome `--kiosk` on the HDMI output, portrait, pointed
+7. Kiosk: `kiosk/` — Chromium `--kiosk` on the HDMI output, portrait, pointed
    at whichever engine's output page; systemd user unit; auto-start on
    login; survives an engine restart.
 8. A/B session on real people under three lighting setups (Brio). Write
@@ -280,4 +283,4 @@ phone-as-camera via WebRTC; a second 4090 only if measured fps demands it.
   on a Samsung LS27D80xE 27" 4K).
 - Machine: kxkm-ai, Ubuntu 24.04.4, tailscale `100.87.54.119`, LAN
   `10.2.0.237`, technician UI ports :7860 (B) / :8000 (A).
-- Festival / date: ______
+- Festival / date: IMA-Niort 2026, Niort, plays 2026-09-24 (confirmed 2026-09-04).

@@ -1,11 +1,11 @@
 # kiosk/
 
-Google Chrome `--kiosk` on the 4090's HDMI output, portrait, pointed at the running
-engine's output page (`KIOSK_URL` in `setup/env.sh` / `booth.conf`). The same Chrome page
+Chromium `--kiosk` (Canonical snap; Google Chrome as fallback) on the 4090's HDMI output, portrait, pointed at the running
+engine's output page (`KIOSK_URL` in `setup/env.sh` / `booth.conf`). The same Chromium page
 holds the camera (`getUserMedia`, auto-granted) and displays the WebRTC output.
 
 - `booth-kiosk.sh` — xrandr (native mode or `KIOSK_MODE`, `KIOSK_ROTATE`), no blanking,
-  cursor hidden, Chrome loop. Logs: `.state/logs/kiosk.log`. DevTools on `:9222` for
+  cursor hidden, browser loop. Logs: `.state/logs/kiosk.log`. DevTools on `:9222` for
   `tools/fps_probe.py` (`tools/cdp.py --screenshot /tmp/k.png` to see what the TV sees).
 - `booth-kiosk.service` — systemd user unit bound to the GNOME session (install lines in
   the file). Needs GDM autologin (`setup/02_root_prereqs.sh`).
