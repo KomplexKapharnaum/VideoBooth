@@ -89,7 +89,8 @@ back over WebRTC — with its own UI, pipelines and control (OSC + HTTP API, NDI
 | State, logs | `/ai/VideoBooth/.state/` — `logs/*.log`, `showmode.stopped`, Chrome profiles |
 | Engine B server | tmux session `booth-b`, `engines/b-streamdiffusion/run.sh`, port **7860** |
 | Engine A server | `engines/a-scope/run.sh`, port **8000** |
-| Kiosk | `systemctl --user status booth-kiosk`, Chromium DevTools **9222** (localhost) |
+| Kiosk | `systemctl --user status booth-kiosk`, Chromium DevTools **9222** (localhost); visitor page served on **7861** |
+| Technician panel | `systemctl --user status booth-panel`, `panel/server.py`, port **7870** (LAN, no auth) |
 | Config | `setup/env.sh` (paths, ports, defaults) overridden by `booth.conf` (gitignored, per machine) |
 
 Pinned versions (2026-09-04): Python 3.10.20 · torch 2.8.0+cu128 · TensorRT 10.12.0.36 ·

@@ -29,6 +29,12 @@ Brio 4K ─USB─▶ kiosk Chromium (camera + display, --kiosk, portrait 55")
 | **installing from scratch** | [INSTALL.md](INSTALL.md) — root steps (Thomas) and user steps, in order |
 | **deciding / arguing** | [CLAUDE.md](CLAUDE.md) the brief and its rules · [ROADMAP.md](ROADMAP.md) decisions, deviations, risks · [DECISION.md](DECISION.md) engine choice · [BENCHMARKS.md](BENCHMARKS.md) every number |
 
+## Technician panel
+
+`http://<box>:7870` from a laptop or tablet on the LAN (`panel/`, no login): live preview of
+the visitor screen, prompt and negative, presets, knobs of the running engine, show mode,
+engine start/stop and the kiosk target.
+
 ## Quick commands (on the box, as `kxkm`, in `/ai/VideoBooth`)
 
 ```bash

@@ -4,6 +4,11 @@ The technician owns the look. "Clean" and "freaky" are two ends of the same dial
 not two configs. This page says what each dial does, where it lives, and what to measure after
 touching it.
 
+The **technician panel** (`http://<box>:7870`, `panel/`) exposes the dials below for the
+engine shown on the kiosk, applies presets, and previews the visitor screen. Engine B's
+negative prompt is the one dial that rebuilds the pipeline (~20 s black); everything else is
+live.
+
 ## 1. The dials (brief rule 2.4)
 
 | Dial | Effect | Engine B (StreamDiffusion) | Engine A (Scope) |

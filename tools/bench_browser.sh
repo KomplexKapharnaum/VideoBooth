@@ -19,7 +19,8 @@ case "${1:-status}" in
     URL=${2:-$KIOSK_URL}; [ -n "$CHROME" ] || { echo "no Chromium/Chrome"; exit 1; }
     [ -f "$PIDF" ] && kill -0 "$(cat "$PIDF")" 2>/dev/null && { echo "already running (pid $(cat "$PIDF"))"; exit 0; }
     mkdir -p "$PROFILE"; rm -f "$PROFILE/SingletonLock"
-    setsid nohup "$CHROME" --headless=new --window-size="$W,$H" --no-first-run --noerrdialogs \
+    # classic --headless: the snap's --headless=new crashes at startup (crashpad ptrace errors)
+    setsid nohup "$CHROME" --headless --disable-gpu --window-size="$W,$H" --no-first-run --noerrdialogs \
       --autoplay-policy=no-user-gesture-required --auto-accept-camera-and-microphone-capture \
       --use-fake-ui-for-media-stream --remote-debugging-port="$CDP_PORT" --user-data-dir="$PROFILE" \
       --disable-features=TranslateUI "$URL" > "$LOG" 2>&1 < /dev/null &
