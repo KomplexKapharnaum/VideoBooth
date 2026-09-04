@@ -1,44 +1,57 @@
 # VideoBooth
 
-Real-time "superhero twin" booth for a KXKM festival. A visitor stands in front of a
-fixed camera; a 55" portrait screen shows a generated superhero that copies their pose
-with a short, constant delay. One machine (RTX 4090), one camera (Logitech Brio 4K), a
-browser in kiosk mode, and a diffusion engine picked by measurement.
+Real-time "superhero twin" booth for KXKM at **IMA-Niort 2026** (Niort, 24 September). A visitor
+stands in front of a fixed camera; a 55" portrait screen shows a generated superhero copying
+their pose with a short, constant delay. One machine (RTX 4090), one camera (Logitech Brio 4K),
+a browser in kiosk mode, and a diffusion engine picked by measurement. Non-commercial demo.
 
 ```
 Brio 4K ─USB─▶ kiosk Chromium (camera + display, --kiosk, portrait 55")
-                  │ WebRTC                       ▲ WebRTC
-                  ▼                              │
-        engine server on the same 4090: Scope (:8000)  or  StreamDiffusion (:7860)
-        depth preprocessor → 1–2 step diffusion → video
-        technician: engine web UI from a laptop on the LAN — dials, presets, reset
+                  │ websocket / WebRTC                 ▲ MJPEG / WebRTC
+                  ▼                                    │
+        engine server on the same 4090:  StreamDiffusion (:7860)  or  Scope (:8000)
+        depth map of the visitor → 1–2 step diffusion → video, ~10–20 fps, ~0.3–1 s behind
+        technician: the engine's web UI from a laptop on the LAN — dials, presets, reset
 ```
 
-> **Status (2026-09-04):** repo and plan; nothing measured yet. Blocker: the GPU driver
-> on the machine needs a repair + reboot (root). See [ROADMAP.md](ROADMAP.md).
+> **Status (2026-09-04):** machine prepared (driver 595 open, Chromium, autologin), Engine B
+> installed with its TensorRT depth preprocessor, first baseline being measured. Engine A not
+> installed yet. Camera arrives the week of 7 September. Details: [ROADMAP.md](ROADMAP.md).
 
-- **Brief and rules** (read first): [CLAUDE.md](CLAUDE.md)
-- **Plan, decisions, deviations, risks**: [ROADMAP.md](ROADMAP.md)
-- **Install on kxkm-ai**: [INSTALL.md](INSTALL.md) · Windows emergency notes: [WINDOWS.md](WINDOWS.md)
-- **Measurements**: [BENCHMARKS.md](BENCHMARKS.md) · **engine choice**: [DECISION.md](DECISION.md)
-- **Presets**: [presets/heroes.json](presets/heroes.json)
+## Start here
 
-## Operating a show (to be completed after Phase 2)
-
-| | |
+| You are… | Read |
 |---|---|
-| Free the GPU | `tools/showmode.sh on` (stops ComfyUI, the whisper worker, VoiceClone, TTS, LLM launchers) |
-| Start the engine | `engines/b-streamdiffusion/run.sh` or `engines/a-scope/run.sh` |
-| Screen | kiosk starts with the session (`systemctl --user status booth-kiosk`); URL in `booth.conf` |
-| Dials | the engine UI from your laptop: steps, strength, depth control scale, negatives, seed lock, interpolation |
-| Presets | `presets/heroes.json` — "Chrome Sentinel" is the clean reference, "Neon Wraith" the freaky end |
-| Per-visitor reset | engine reset button (Scope: stream restart) |
-| Stall | engine restart; the kiosk reconnects by itself |
-| After the show | `tools/showmode.sh off` restores the other services |
+| **new on the project** | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) — access, day-1 checklist, how to work on the box |
+| **wondering how it works** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the whole chain, ports, paths, constraints |
+| **running a show or rehearsal** | [docs/OPERATIONS.md](docs/OPERATIONS.md) — show day, during, after, troubleshooting |
+| **changing the look** | [docs/TUNING.md](docs/TUNING.md) — dials, presets, config keys, the measure-after-every-change rule |
+| **installing from scratch** | [INSTALL.md](INSTALL.md) — root steps (Thomas) and user steps, in order |
+| **deciding / arguing** | [CLAUDE.md](CLAUDE.md) the brief and its rules · [ROADMAP.md](ROADMAP.md) decisions, deviations, risks · [DECISION.md](DECISION.md) engine choice · [BENCHMARKS.md](BENCHMARKS.md) every number |
+
+## Quick commands (on the box, as `kxkm`, in `/ai/VideoBooth`)
+
+```bash
+setup/99_verify.sh                              # is the machine ready? PASS/FAIL list
+tools/showmode.sh on|off|status                 # free the GPU for a show / give it back
+tmux new -d -s booth-b engines/b-streamdiffusion/run.sh    # Engine B → http://<box>:7860
+engines/a-scope/run.sh                          # Engine A → http://<box>:8000 (once installed)
+systemctl --user status booth-kiosk             # the visitor screen; tools/cdp.py --screenshot /tmp/k.png
+.engines/StreamDiffusion/.venv/bin/python tools/engine_b_probe.py --source lavfi --seconds 60 --label "…"   # fps / jitter / latency
+```
 
 ## Repo map
-`setup/` install scripts (00 audit · 01 driver fix · 02 prereqs · 10 engine B · 20 engine A · 99 verify) ·
-`tools/` show mode, camera check, fps/jitter probe, latency protocol ·
-`kiosk/` Chromium kiosk + systemd user unit · `engines/` per-engine config, run script and dial map.
+
+```
+CLAUDE.md  ROADMAP.md  INSTALL.md  BENCHMARKS.md  DECISION.md  WINDOWS.md   the documents
+docs/            ARCHITECTURE · GETTING-STARTED · OPERATIONS · TUNING
+setup/           00 audit · 01 driver fix (root) · 02 prereqs (root) · 10 engine B · 20 engine A · 99 verify · env.sh
+tools/           showmode · camera_check · engine_b_probe · fps_probe + cdp (DevTools) · bench_browser · LATENCY.md
+kiosk/           Chromium kiosk launcher + systemd user unit (portrait, camera auto-granted)
+engines/         a-scope/ (notes, run.sh) · b-streamdiffusion/ (config yaml, run.sh, depth engine builder)
+presets/         heroes.json — technician presets, safety negatives always on
+booth.conf       (gitignored) per-machine overrides of setup/env.sh
+.engines/ .hf/ .state/   (gitignored, on the box) upstream checkouts + venvs, model cache, logs + state
+```
 
 License: GPL-3.0. Engines keep their own licenses (Scope CC BY-NC-SA 4.0, StreamDiffusion Apache-2.0).

@@ -1,5 +1,8 @@
 # Install on kxkm-ai (Ubuntu 24.04, RTX 4090)
 
+> Already done on kxkm-ai (2026-09-04) up to step 5 for Engine B. New here? Start with
+> [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md); this page is the from-scratch procedure.
+
 Two hands: **root steps are Thomas's** (sudo needs a password on this shared box), the
 rest runs as `kxkm`. Every script is idempotent; re-run after a change. Paths and ports:
 `setup/env.sh` (override in `booth.conf`).
