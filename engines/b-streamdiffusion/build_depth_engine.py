@@ -52,8 +52,8 @@ def main():
         sys.exit('engine build failed')
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     with open(a.out, 'wb') as f:
-        f.write(blob)
-    print(f'ok: {a.out} ({len(blob) / 1e6:.1f} MB) in {time.time() - t0:.0f}s')
+        f.write(memoryview(blob))
+    print(f'ok: {a.out} ({blob.nbytes / 1e6:.1f} MB) in {time.time() - t0:.0f}s')
 
 
 if __name__ == '__main__':
