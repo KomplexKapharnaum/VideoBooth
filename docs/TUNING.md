@@ -39,8 +39,10 @@ steps, seed.
 ## 3. Engine B config — `engines/b-streamdiffusion/booth_sd15_depth.yaml`
 
 Keys follow the fork's `configs/sd15_multicontrol.yaml.example` and `src/streamdiffusion/config.py`.
-The server reads it **at start** (`run.sh --controlnet-config`); dials changed in the UI do not
-write back to it — edit the file for new defaults.
+`run.sh` uploads it to the server after start (the demo applies configs only through its
+upload endpoint); after editing it, `engines/b-streamdiffusion/apply_config.sh` reloads it
+live — the pipeline rebuilds on the next stream, TensorRT engines only if model or
+resolution changed. Dials changed in the UI do not write back to the file.
 
 | Key | Baseline | Notes |
 |---|---|---|
