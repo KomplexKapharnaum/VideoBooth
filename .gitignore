@@ -1,0 +1,20 @@
+# upstream engine checkouts, venvs, model caches and built TensorRT engines live
+# under the repo clone on the booth machine but never in git
+.engines/
+.hf/
+.venv/
+venv/
+node_modules/
+*.engine
+*.plan
+*.onnx
+*.safetensors
+*.ckpt
+*.pth
+*.log
+logs/
+__pycache__/
+*.pyc
+.env
+.state/
+booth.conf

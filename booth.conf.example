@@ -1,0 +1,7 @@
+# Copy to booth.conf next to setup/ and override what differs on this machine.
+# CAMERA_DEV=/dev/video2
+# KIOSK_URL=http://127.0.0.1:8000
+# KIOSK_ROTATE=right
+# KIOSK_MODE=3840x2160
+# SCOPE_REF=<commit that passed the bench>
+# SD_REF=<commit that passed the bench>

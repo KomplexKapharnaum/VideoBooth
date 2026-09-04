@@ -1,0 +1,31 @@
+# VideoBooth — Engine B baseline (CLAUDE.md §5). Keys per the Daydream fork's
+# configs/sd15_multicontrol.yaml.example (read 2026-09-04). Values are starting points:
+# every change goes to BENCHMARKS.md with its measurement.
+model_id: "SimianLuo/LCM_Dreamshaper_v7"      # local alt: /ai/data/models/checkpoints/LCM_Dreamshaper_v7_4k.safetensors
+prompt: "a superhero in a sleek chrome armored suit, glowing blue chest emblem, dramatic rim light, cinematic still, sharp focus"
+negative_prompt: "nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation, ugly, deformed, bad anatomy, extra limbs, blurry, low quality, watermark, text"
+t_index_list: [24]                            # 1 step ≈ denoise 0.5 · 2 steps: [18, 32]
+width: 512
+height: 768
+device: "cuda"
+dtype: "float16"
+guidance_scale: 1.0
+num_inference_steps: 50
+seed: 42
+scheduler: "lcm"
+acceleration: "tensorrt"
+use_denoising_batch: true
+use_tiny_vae: true
+engine_dir: "/ai/VideoBooth/.engines/trt"
+
+use_controlnet: true
+controlnets:
+  - model_id: "lllyasviel/control_v11f1p_sd15_depth"   # local alt: /ai/data/models/controlnet/control_v11f1p_sd15_depth.safetensors
+    conditioning_scale: 0.9
+    preprocessor: "depth"                     # then "depth_tensorrt" with preprocessor_params.engine_path
+    preprocessor_params:
+      detect_resolution: 512
+      image_resolution: 512
+    enabled: true
+
+use_ipadapter: false

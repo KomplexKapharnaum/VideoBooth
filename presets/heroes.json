@@ -1,0 +1,66 @@
+{
+  "_schema": {
+    "name": "preset label shown to the technician",
+    "prompt": "positive prompt",
+    "negative": "negative prompt — the safety terms below are ALWAYS present (brief rule 2.7); aesthetic terms are optional",
+    "control_scale": "depth control scale, 0.0–1.0 (below 1.0 = anatomy may go wrong while the pose stays)",
+    "strength": "img2img / v2v strength (denoise), 0.0–1.0",
+    "steps": "denoising steps, 1–4",
+    "seed_lock": "true = fixed seed (calm), false = per-frame seed (flicker texture, Engine B)",
+    "notes": "what this preset is for, lighting hints"
+  },
+  "_safety_negative": "nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation",
+  "_aesthetic_negative": "ugly, deformed, bad anatomy, extra limbs, blurry, low quality, watermark, text",
+  "presets": [
+    {
+      "name": "Chrome Sentinel (clean)",
+      "prompt": "a superhero in a sleek chrome armored suit, glowing blue chest emblem, dramatic rim light, cinematic still, sharp focus",
+      "negative": "nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation, ugly, deformed, bad anatomy, extra limbs, blurry, low quality, watermark, text",
+      "control_scale": 1.0,
+      "strength": 0.55,
+      "steps": 2,
+      "seed_lock": true,
+      "notes": "Clean end of the dials. Reference preset for pose-legibility checks. Neutral front light."
+    },
+    {
+      "name": "Crimson Colossus",
+      "prompt": "a towering superhero with a crimson cape and oversized gauntlets, muscular silhouette, comic book ink and halftone, bold shadows",
+      "negative": "nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation, ugly, deformed, blurry, watermark, text",
+      "control_scale": 0.9,
+      "strength": 0.65,
+      "steps": 1,
+      "seed_lock": true,
+      "notes": "Volume invented around the body. Works with a hard side light."
+    },
+    {
+      "name": "Neon Wraith",
+      "prompt": "a translucent superhero made of neon light trails and smoke, electric violet and cyan, long exposure, dark void background",
+      "negative": "nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation, watermark, text",
+      "control_scale": 0.8,
+      "strength": 0.7,
+      "steps": 1,
+      "seed_lock": false,
+      "notes": "Freaky end: seed unlocked → flicker as texture. Low-key booth, colored gels."
+    },
+    {
+      "name": "Bone Knight",
+      "prompt": "an armored superhero whose armor looks grown like bone and shell, pale ivory plates, uncanny proportions, museum lighting, film grain",
+      "negative": "nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation, watermark, text",
+      "control_scale": 0.75,
+      "strength": 0.7,
+      "steps": 1,
+      "seed_lock": true,
+      "notes": "Borderline anatomy from the control scale alone; aesthetic negatives removed on purpose."
+    },
+    {
+      "name": "Golden Age (poster)",
+      "prompt": "a golden age comic book superhero, primary colors, thick ink outlines, screen-printed paper texture, heroic pose, 1940s poster",
+      "negative": "nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation, ugly, deformed, bad anatomy, blurry, watermark, text",
+      "control_scale": 1.0,
+      "strength": 0.5,
+      "steps": 3,
+      "seed_lock": true,
+      "notes": "Family-friendly poster look; slowest preset, 3 steps (Engine B) or interpolation on (Engine A)."
+    }
+  ]
+}

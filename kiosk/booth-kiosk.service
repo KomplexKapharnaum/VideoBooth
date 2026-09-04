@@ -1,0 +1,19 @@
+# systemd --user unit. Install (as kxkm):
+#   mkdir -p ~/.config/systemd/user && ln -sf /ai/VideoBooth/kiosk/booth-kiosk.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now booth-kiosk.service
+# GNOME imports DISPLAY/XAUTHORITY into the user manager and starts graphical-session.target
+# once the (auto)login session is up, so this unit follows the session — and survives an
+# engine restart (the page reloads by itself / the loop restarts Chrome).
+[Unit]
+Description=VideoBooth kiosk — Chrome fullscreen on the HDMI output
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/ai/VideoBooth/kiosk/booth-kiosk.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target
