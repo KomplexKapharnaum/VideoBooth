@@ -1,0 +1,12 @@
+diff --git a/demo/realtime-img2img/routes/inference.py b/demo/realtime-img2img/routes/inference.py
+index f9bce55..f240ec0 100644
+--- a/demo/realtime-img2img/routes/inference.py
++++ b/demo/realtime-img2img/routes/inference.py
+@@ -27,6 +27,7 @@ async def stream(user_id: uuid.UUID, request: Request, app_instance=Depends(get_
+             app_instance.app_state.pipeline_lifecycle = "starting"
+             logging.info("stream: Creating pipeline using AppState as single source of truth...")
+             app_instance.pipeline = app_instance._create_pipeline()
++            app_instance.app_state.config_needs_reload = False  # booth: a fresh pipeline already reflects the uploaded config
+             app_instance.app_state.pipeline_lifecycle = "running"
+             logging.info("stream: Pipeline created successfully")
+         
