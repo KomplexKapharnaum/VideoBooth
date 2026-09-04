@@ -94,8 +94,9 @@ they differ (see "Deviations").
 - [ ] `tools/camera_check.sh` (formats, real fps).
 - [ ] Engine B: `setup/10_engine_b.sh`, TensorRT engines 512×768, baseline run,
       `tools/fps_probe.py` 2 min moving person → BENCHMARKS.md.
-- [ ] Engine A: `setup/20_engine_a.sh` (ask before the ~20 GB Wan download), LongLive
-      bare, then VACE depth; SDV2 bare once → BENCHMARKS.md.
+- [x] Engine A: `setup/20_engine_a.sh`, LongLive bare + VACE (input video as control)
+      → BENCHMARKS.md 2026-09-04: 7 / 5.7 fps in 12-frame bursts every 1.6–1.9 s. Left:
+      SDV2 bare, the depth-node graph, fp8.
 - [ ] Glass-to-glass for both (`tools/LATENCY.md`).
 - [ ] Kiosk unit live on the desk monitor, portrait.
 
