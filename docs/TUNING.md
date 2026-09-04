@@ -68,13 +68,21 @@ resolution changed. Dials changed in the UI do not write back to the file.
 Adding a second ControlNet (e.g. OpenPose, weights already in `/ai/data/models/controlnet/`)
 is another `controlnets:` entry — expect fps to drop; measure.
 
-## 4. Engine A settings — Scope UI
+## 4. Engine A settings — Scope (v0.2.5, verified names)
 
-Pipeline **LongLive**, VACE **On**, control video = camera through the built-in
-`video-depth-anything` preprocessor, resolution 480x832, 1 step, tiny VAE on. StreamDiffusionV2
-only for the bare-speed number (its docs say VACE quality on it is poor). Exact setting names
-are filled into `engines/a-scope/README.md` during Phase 1. Scope accepts OSC and an HTTP API
-for live parameter control — the way a laptop drives the kiosk's session.
+Pipeline **longlive**. **Load params** (`POST /api/v1/pipeline/load`, a reload each time they
+change): `height`/`width` (480x832 for the booth; the model is trained at 832x480),
+`vae_type` (`wan` full, `lightvae`, `tae` tiny, `lighttae`), `denoising_steps` (timestep
+schedule, default `[1000, 750, 500, 250]`; `[1000]` = one step — measured: no rate change),
+`base_seed`, `quantization` (`fp8_e4m3fn` or none), `vace_enabled` + `vace_context_scale`.
+**Session params** (`POST /api/v1/session/parameters`, live): `noise_scale` (v2v strength,
+default 0.7), `noise_controller` (auto by motion), `denoising_step_list`, `vace_enabled`,
+`vace_use_input_video` (raw video as control — reproduces the input; use a depth node in a
+graph for pose control), `vace_context_scale`, `reset_cache` (per-visitor reset),
+`kv_cache_attention_bias` (pipelines that support it), `lora_scales`, `output_sinks` (`ndi`).
+The UI exposes the same; OSC too. `tools/engine_a_probe.py` sets them from the command
+line for a bench. Measured 2026-09-04: LongLive delivers ~12 frames per block every
+1.6–1.9 s — read BENCHMARKS.md before spending time on Engine A dials.
 
 ## 5. The rule after every change
 

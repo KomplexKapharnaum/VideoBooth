@@ -164,9 +164,9 @@ show mode on (GPU free: 1.6 GB used before load). Driver 595.84.
 |---|---|---|---|---|---|---|---|
 | 14:47 | A LongLive **bare**, default schedule [1000,750,500,250], flash clip, 90 s | **7.07** | 141 / 3 / 1577 / 1612 ms | 432 ms | 53 | 7.03 | 16 flashes seen (input→output link OK) |
 | 14:49 | A LongLive bare, **1 step** [1000], flash clip, 60 s | 7.22 | 138 / 3 / 1576 / 1604 ms | 428 ms | 35 | 7.02 | same rate as 4 steps |
-| 14:52 | A LongLive **+ VACE 0.85** (input video as control), 1 step, webcam clip, 90 s | **5.82** | 172 / 3 / 1943 / 2031 ms | 531 ms | 43 | 5.71 | look: coherent stylised figure |
+| 14:52 | A LongLive **+ VACE 0.85** (input video as control), 1 step, webcam clip, 90 s | **5.82** | 172 / 3 / 1943 / 2031 ms | 531 ms | 43 | 5.71 | output ≈ the input frame plus noise: with the raw video as VACE control the model reproduces it, the prompt barely applies — the depth-node graph is the real test |
 
-Reading: LongLive generates **blocks of ~12 frames** and delivers each block at once —
+Frames seen: bare v2v on the test pattern paints a chrome hero over the colour bars (the prompt applies, the input stays as background); VACE-from-raw-video returns the input. Reading: LongLive generates **blocks of ~12 frames** and delivers each block at once —
 **one burst every 1.58 s bare, 1.93 s with VACE** (p50 interval 3 ms inside a burst, 1.6–2 s
 between bursts). Sustained rate 7 fps bare / 5.7 fps with VACE, below the ≥ 10 fps target,
 and the latency **cannot be constant** at this cadence: a movement lands on screen 0–2 s

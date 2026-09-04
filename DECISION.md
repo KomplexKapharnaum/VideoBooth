@@ -10,7 +10,7 @@ setups). Score order: latency constancy, then fps, then look._
 | fps at baseline | 5.7 (VACE), 7.0 (bare) | 33–37 engine, 33 presented |
 | Glass-to-glass mean ± spread (s) | not measured; ≥ 1.6–2 s by construction (block cadence) | not measured; engine-side 0.13 s ± 0.04 |
 | Pose legibility (3 lightings) | not tested (clip only) | not tested (clip / desk webcam only) |
-| Look: clean end / freaky end | coherent stylised figure (one frame seen); temporal coherence is its strength | per-frame chrome-armour look, flicker as texture |
+| Look: clean end / freaky end | bare v2v stylises strongly (chrome hero painted over the test pattern); VACE from the raw video returns the input — depth-node graph untested; temporal coherence is its strength | per-frame chrome-armour look following the input structures, flicker as texture |
 | Dials available live | noise_scale, steps, VACE scale, cache reset, kv bias, LoRA (API/OSC/UI) | strength (t_index), steps, CN scale, seed, similarity filter (UI/API) |
 | Operational risk (alpha, restarts, VRAM) | alpha; ~22 GB VRAM, exclusive GPU; block cadence | 4 upstream traps fixed; ~5 GB VRAM; single-threaded server (one stream) |
 
