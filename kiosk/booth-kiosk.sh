@@ -34,9 +34,11 @@ fi
 
 # Chromium flags: kiosk + camera auto-grant (verified on Chrome 149, HNdi 2026-09-04) +
 # DevTools port for tools/fps_probe.py. 127.0.0.1 is a secure context, getUserMedia works.
+# --incognito: no session restore — a restart must not bring back the previous page as a
+# second tab (a stale demo tab keeps its own stream and starves the engine's event loop).
 while true; do
   rm -f "$PROFILE/SingletonLock" 2>/dev/null
-  "$CHROME" --kiosk --start-fullscreen --window-position=0,0 --no-first-run --noerrdialogs \
+  "$CHROME" --kiosk --incognito --start-fullscreen --window-position=0,0 --no-first-run --noerrdialogs \
     --disable-infobars --disable-session-crashed-bubble --disable-features=TranslateUI \
     --autoplay-policy=no-user-gesture-required --auto-accept-camera-and-microphone-capture \
     --overscroll-history-navigation=0 --check-for-update-interval=31536000 \

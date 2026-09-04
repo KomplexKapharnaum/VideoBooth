@@ -11,7 +11,7 @@ frames. Stdlib only (uses cdp.py next to it).
   tools/fps_probe.py --seconds 120 --select 'video#output' --stall-ms 250 --json out.json
 Paste the last line into BENCHMARKS.md with the exact engine settings.
 """
-import argparse, json, os, statistics, sys, time
+import argparse, json, os, socket, statistics, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cdp  # noqa: E402
 
@@ -36,8 +36,12 @@ def screencast(ws, seconds):
     ws.call('Page.enable')
     ws.call('Page.startScreencast', format='jpeg', quality=5, maxWidth=96, maxHeight=96, everyNthFrame=1)
     t0, ts = time.time(), []
+    ws.s.settimeout(5)
     while time.time() - t0 < seconds:
-        msg = json.loads(ws.recv())
+        try:
+            msg = json.loads(ws.recv())
+        except socket.timeout:
+            continue          # nothing repainted for 5 s — keep waiting until the deadline
         if msg.get('method') == 'Page.screencastFrame':
             p = msg['params']; ts.append(p['metadata']['timestamp'])
             ws.n += 1; ws.send({'id': ws.n, 'method': 'Page.screencastFrameAck', 'params': {'sessionId': p['sessionId']}})
