@@ -1,30 +1,44 @@
 # VideoBooth — Engine B baseline (CLAUDE.md §5). Keys per the Daydream fork's
-# configs/sd15_multicontrol.yaml.example (read 2026-09-04). Values are starting points:
-# every change goes to BENCHMARKS.md with its measurement.
+# configs/sd15_multicontrol.yaml.example + src/streamdiffusion/config.py (read on the box,
+# 2026-09-04). Values are starting points: every change goes to BENCHMARKS.md with its number.
 model_id: "SimianLuo/LCM_Dreamshaper_v7"      # local alt: /ai/data/models/checkpoints/LCM_Dreamshaper_v7_4k.safetensors
 prompt: "a superhero in a sleek chrome armored suit, glowing blue chest emblem, dramatic rim light, cinematic still, sharp focus"
 negative_prompt: "nudity, naked, nsfw, sexual, explicit, gore, blood, wounds, mutilation, ugly, deformed, bad anatomy, extra limbs, blurry, low quality, watermark, text"
-t_index_list: [24]                            # 1 step ≈ denoise 0.5 · 2 steps: [18, 32]
+t_index_list: [24]                            # 1 step ≈ denoise 0.5 · 2 steps: [18, 32] · lower index = more change
 width: 512
 height: 768
 device: "cuda"
 dtype: "float16"
 guidance_scale: 1.0
 num_inference_steps: 50
-seed: 42
+seed: 42                                      # seed lock = keep it; flicker texture = change per frame from the UI
+frame_buffer_size: 1
+delta: 0.7
+cfg_type: "self"
 scheduler: "lcm"
+sampler: "normal"
 acceleration: "tensorrt"
 use_denoising_batch: true
 use_tiny_vae: true
 engine_dir: "/ai/VideoBooth/.engines/trt"
 
+# Stochastic similarity filter (brief §4 B): OFF at baseline — it freezes output on a static
+# input, which is a dial for the technician, not a default.
+enable_similar_image_filter: false
+similar_image_filter_threshold: 0.98
+similar_image_filter_max_skip_frame: 10
+
 use_controlnet: true
 controlnets:
   - model_id: "lllyasviel/control_v11f1p_sd15_depth"   # local alt: /ai/data/models/controlnet/control_v11f1p_sd15_depth.safetensors
     conditioning_scale: 0.9
-    preprocessor: "depth"                     # then "depth_tensorrt" with preprocessor_params.engine_path
+    # Depth Anything V2 small on TensorRT, built by engines/b-streamdiffusion/build_depth_engine.py
+    # from the ONNX already on the box (/ai/data/models/tensorrt/depth-anything/depth_anything_v2_vits.onnx).
+    # The fork's plain "depth" preprocessor is a CPU DPT model (Intel/dpt-large) — not real-time.
+    preprocessor: "depth_tensorrt"
     preprocessor_params:
-      detect_resolution: 512
+      engine_path: "/ai/VideoBooth/.engines/trt/depth_anything_v2_vits-fp16.engine"
+      detect_resolution: 518                  # must match the engine input size
       image_resolution: 512
     enabled: true
 
