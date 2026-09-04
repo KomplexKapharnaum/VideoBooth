@@ -184,13 +184,13 @@ def preview_jpeg(width=480):
         try:
             if PREVIEW['ws'] is None:
                 PREVIEW['ws'] = cdp.WS(cdp.page()['webSocketDebuggerUrl'])
-                m = PREVIEW['ws'].call('Page.getLayoutMetrics')['result']
+                m = PREVIEW['ws'].call('Page.getLayoutMetrics')          # cdp.WS.call returns the result dict
                 vp = m.get('cssVisualViewport') or m.get('visualViewport') or {}
                 PREVIEW['vw'], PREVIEW['vh'] = vp.get('clientWidth', 1920), vp.get('clientHeight', 1080)
             scale = min(1.0, width / float(PREVIEW['vw'] or width))
             r = PREVIEW['ws'].call('Page.captureScreenshot', format='jpeg', quality=55,
                                    clip={'x': 0, 'y': 0, 'width': PREVIEW['vw'], 'height': PREVIEW['vh'], 'scale': scale})
-            PREVIEW['last'] = base64.b64decode(r['result']['data']); PREVIEW['at'] = time.time()
+            PREVIEW['last'] = base64.b64decode(r['data']); PREVIEW['at'] = time.time()
             return PREVIEW['last']
         except Exception as e:  # noqa: BLE001
             PREVIEW['ws'] = None
@@ -210,7 +210,7 @@ def status():
         pg = cdp.page(); kiosk_url = pg.get('url')
         ws = cdp.WS(pg['webSocketDebuggerUrl'])
         r = ws.call('Runtime.evaluate', expression='window.__booth&&window.__booth.ws?window.__booth.ws.readyState:-1', returnByValue=True)
-        ws_state = r['result']['result'].get('value')
+        ws_state = r['result'].get('value')
     except Exception:  # noqa: BLE001
         pass
     tmux = run('tmux ls 2>/dev/null | cut -d: -f1').split()
