@@ -91,6 +91,7 @@ back over WebRTC — with its own UI, pipelines and control (OSC + HTTP API, NDI
 | Engine A server | `engines/a-scope/run.sh`, port **8000** |
 | Kiosk | `systemctl --user status booth-kiosk`, Chromium DevTools **9222** (localhost); visitor page served on **7861** |
 | Technician panel | `systemctl --user status booth-panel`, `panel/server.py`, port **7870** (LAN, no auth) |
+| Boot state | `booth-boot.service` → `tools/boot_state.sh`: at boot engines stopped, show mode off, screen blank; the technician starts things from the panel |
 | Config | `setup/env.sh` (paths, ports, defaults) overridden by `booth.conf` (gitignored, per machine) |
 | Presets (live) | `/ai/VideoBooth/.state/presets.json` — seeded from `presets/heroes.json`, edited from the panel, dated backups beside it |
 | Demo patches | `engines/b-streamdiffusion/patches/` — applied to the StreamDiffusion checkout by the installer (live negative prompt, no double rebuild) |

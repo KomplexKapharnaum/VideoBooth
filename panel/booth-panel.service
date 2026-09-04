@@ -4,7 +4,8 @@
 # Reach it from the LAN / tailnet: http://<box>:7870  (no auth — LAN only, by decision 2026-09-04)
 [Unit]
 Description=VideoBooth technician panel (http://0.0.0.0:7870)
-After=network.target
+After=network.target booth-boot.service
+Wants=booth-boot.service
 
 [Service]
 Type=simple

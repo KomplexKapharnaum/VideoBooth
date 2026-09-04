@@ -66,6 +66,14 @@ systemctl --user daemon-reload && systemctl --user enable --now booth-kiosk.serv
 `KIOSK_URL` / `KIOSK_ROTATE` / `KIOSK_MODE` in `booth.conf`. Screenshot of what the TV
 shows: `tools/cdp.py --screenshot /tmp/k.png`.
 
+## 6b. Panel + boot state (kxkm)
+```bash
+ln -sf /ai/VideoBooth/panel/booth-panel.service ~/.config/systemd/user/ && ln -sf /ai/VideoBooth/panel/booth-boot.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable booth-boot.service && systemctl --user enable --now booth-panel.service
+```
+At boot the booth comes up idle (engines stopped, show mode off, blank screen); the panel at
+`http://<box>:7870` starts everything.
+
 ## 7. Verify + show mode
 ```bash
 setup/99_verify.sh                              # PASS/FAIL list

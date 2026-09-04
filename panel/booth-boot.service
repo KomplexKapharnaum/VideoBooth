@@ -1,0 +1,16 @@
+# systemd --user oneshot: reset the booth to STOP / show mode off / blank screen at boot,
+# before the panel starts. Install (as kxkm):
+#   ln -sf /ai/VideoBooth/panel/booth-boot.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable booth-boot.service
+[Unit]
+Description=VideoBooth boot state (engines stopped, show mode off, screen blank)
+Before=booth-panel.service booth-kiosk.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/ai/VideoBooth
+ExecStart=/ai/VideoBooth/tools/boot_state.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target

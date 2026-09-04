@@ -85,6 +85,15 @@ The box goes back to being the research machine. Leave the kiosk unit enabled or
 - **Chromium snap**: refresh is held. To update deliberately: `sudo snap refresh chromium`
   (root), then re-test camera and kiosk.
 
+## Boot behaviour
+
+After a boot the booth comes up **idle on purpose**: `booth-boot.service` (user unit, runs
+before the panel) clears any stale show-mode state, makes sure no engine runs, and points
+the visitor screen at the blank page; GDM auto-logs `kxkm` in, the kiosk unit shows black,
+the panel is reachable at `:7870`. The box's other services start normally. **Nothing
+touches the GPU until a technician picks an engine and turns show mode on in the panel.**
+Same reset by hand: `tools/boot_state.sh` (then `systemctl --user restart booth-kiosk`).
+
 ## Reboot procedure
 
 1. `tools/showmode.sh status` — note what runs (other people's services restart on their
