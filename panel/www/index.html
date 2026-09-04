@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>VideoBooth · control room</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{--bg:#111318;--panel:#1a1d24;--line:#2a2f3a;--txt:#e8eaf0;--mut:#8b93a5;--acc:#4f8cff;--ok:#3ddc84;--warn:#ffb020;--bad:#ff5a5a}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.4 system-ui,sans-serif}
+  header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:2}
+  header h1{font-size:17px;margin:0 10px 0 0} .chip{padding:4px 10px;border-radius:999px;background:#242833;color:var(--mut);font-size:13px;white-space:nowrap}
+  .chip b{color:var(--txt)} .chip.ok{color:var(--ok)} .chip.bad{color:var(--bad)} .chip.warn{color:var(--warn)}
+  main{display:grid;grid-template-columns:minmax(260px,1fr) minmax(320px,1.4fr) minmax(300px,1fr);gap:12px;padding:12px}
+  @media(max-width:1100px){main{grid-template-columns:1fr 1fr}} @media(max-width:720px){main{grid-template-columns:1fr}}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+  section h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:0 0 10px}
+  #preview{width:100%;background:#000;border-radius:8px;aspect-ratio:9/16;object-fit:contain;display:block}
+  #preview.landscape{aspect-ratio:16/9}
+  textarea{width:100%;min-height:74px;background:#0e1014;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;font:14px/1.35 inherit;resize:vertical}
+  textarea.dirty{border-color:var(--acc)}
+  .row{display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap}
+  button{background:#242833;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:9px 14px;font:inherit;cursor:pointer}
+  button:hover{border-color:var(--acc)} button.primary{background:var(--acc);border-color:var(--acc);color:#fff} button.danger{border-color:var(--bad);color:var(--bad)}
+  button.on{background:#1f3a2a;border-color:var(--ok);color:var(--ok)} button:disabled{opacity:.5;cursor:wait}
+  .knob{margin:10px 0} .knob label{display:flex;justify-content:space-between;font-size:14px;color:var(--mut)} .knob label b{color:var(--txt)}
+  input[type=range]{width:100%;accent-color:var(--acc)} input[type=number]{width:120px;background:#0e1014;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px;font:inherit}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden} .seg button{border:0;border-radius:0;padding:8px 14px} .seg button.on{background:var(--acc);color:#fff}
+  .presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px} .presets button{text-align:left;padding:10px} .presets small{display:block;color:var(--mut);font-size:12px;margin-top:3px}
+  .safety{font-size:12px;color:var(--mut);margin:4px 0} .safety span{display:inline-block;background:#2a1f1f;color:#ff9a9a;border-radius:6px;padding:1px 6px;margin:2px 3px 0 0}
+  #log{font:12px/1.5 ui-monospace,monospace;color:var(--mut);white-space:pre-wrap;max-height:180px;overflow:auto;background:#0e1014;border-radius:8px;padding:8px}
+  .hint{font-size:12px;color:var(--mut)} .hide{display:none}
+</style></head>
+<body>
+<header>
+  <h1>VideoBooth · control room</h1>
+  <span class="chip" id="c-engine">kiosk: —</span>
+  <span class="chip" id="c-b">B —</span>
+  <span class="chip" id="c-a">A —</span>
+  <span class="chip" id="c-gpu">GPU —</span>
+  <span class="chip" id="c-kiosk">kiosk —</span>
+  <span class="chip" id="c-show">show mode —</span>
+  <span class="chip" id="c-time"></span>
+</header>
+<main>
+  <section>
+    <h2>Render preview — what the visitor sees</h2>
+    <img id="preview" alt="preview">
+    <div class="row"><span class="hint" id="preview-hint">live screenshot of the kiosk browser, 2 fps</span></div>
+    <h2 style="margin-top:14px">Show operations</h2>
+    <div class="row">
+      <button data-op="showmode_on" title="stop the other GPU tenants">Show mode ON</button>
+      <button data-op="showmode_off">Show mode OFF</button>
+    </div>
+    <div class="row">
+      <button data-op="engine_b_start">Engine B start</button><button data-op="engine_b_stop" class="danger">B stop</button>
+      <button data-op="engine_a_start">Engine A start</button><button data-op="engine_a_stop" class="danger">A stop</button>
+      <button data-op="engine_a_free" title="Scope keeps ~22 GB loaded after a session: restart it">A free GPU</button>
+    </div>
+    <div class="row">
+      <button data-op="kiosk_b" title="Engine B output-only page">Kiosk → B</button>
+      <button data-op="kiosk_a" title="Scope's own page">Kiosk → A</button>
+      <button data-op="kiosk_restart">Kiosk restart</button>
+    </div>
+    <div id="log"></div>
+  </section>
+
+  <section>
+    <h2>Prompt (+)</h2>
+    <textarea id="prompt" placeholder="what the twin looks like…"></textarea>
+    <div class="row"><button class="primary" id="apply-prompt">Apply prompt</button><span class="hint">live · Ctrl+Enter</span></div>
+    <h2 style="margin-top:14px">Negative (−)</h2>
+    <div class="safety">always on: <span>nudity</span><span>naked</span><span>nsfw</span><span>sexual</span><span>explicit</span><span>gore</span><span>blood</span><span>wounds</span><span>mutilation</span></div>
+    <textarea id="negative" placeholder="aesthetic negatives, e.g. ugly, deformed, bad anatomy, blurry (remove them for the freaky end)"></textarea>
+    <div class="row"><button id="apply-negative">Apply negative</button><span class="hint" id="neg-hint">Engine B: rebuilds the pipeline, ~20 s black · Engine A: live</span></div>
+    <h2 style="margin-top:14px">Presets</h2>
+    <div class="presets" id="presets"></div>
+  </section>
+
+  <section>
+    <h2>Knobs · <span id="knobs-engine">Engine B</span></h2>
+    <div id="knobs-b">
+      <div class="knob"><label>Depth control scale <b id="v-control">0.9</b></label><input type="range" id="k-control" min="0" max="1.5" step="0.05" value="0.9"><div class="hint">1.0 = pose locked · below = anatomy free to go wrong</div></div>
+      <div class="knob"><label>Steps</label><div class="seg" id="k-steps"><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button></div></div>
+      <div class="knob"><label>Strength (how far from the camera) <b id="v-strength">0.5</b></label><input type="range" id="k-strength" min="0.1" max="0.9" step="0.05" value="0.5"><div class="hint">t_index_list = <span id="v-tindex">[24]</span></div></div>
+      <div class="knob"><label>Guidance <b id="v-guidance">1.0</b></label><input type="range" id="k-guidance" min="0.5" max="2" step="0.05" value="1.0"></div>
+      <div class="knob"><label>Delta (temporal residual noise) <b id="v-delta">0.7</b></label><input type="range" id="k-delta" min="0" max="1" step="0.05" value="0.7"></div>
+      <div class="knob"><label>Seed</label><div class="row"><input type="number" id="k-seed" value="42"><button id="seed-apply">Set</button><button id="seed-random">Random</button><button id="flicker">Flicker OFF</button></div><div class="hint">flicker = new seed every 150 ms (per-frame texture)</div></div>
+    </div>
+    <div id="knobs-a" class="hide">
+      <div class="knob"><label>Noise scale (v2v strength) <b id="v-noise">0.7</b></label><input type="range" id="k-noise" min="0" max="1" step="0.05" value="0.7"></div>
+      <div class="knob"><label>VACE scale <b id="v-vace">0.85</b></label><input type="range" id="k-vace" min="0" max="2" step="0.05" value="0.85"></div>
+      <div class="row"><button id="vace-toggle">VACE ON</button><button id="a-reset" class="primary">Reset (new visitor)</button></div>
+      <div class="hint">LongLive delivers ~12-frame blocks every 1.6–1.9 s (BENCHMARKS.md)</div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const api = (p, body) => fetch(p, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)} : {}).then(r => r.json());
+let engine = 'B', dirty = {prompt:false, negative:false}, filled = false, vaceOn = true, flickerOn = false;
+const logEl = $('#log'); const say = m => { logEl.textContent = (new Date().toLocaleTimeString() + ' ' + m + '\n' + logEl.textContent).slice(0, 4000); };
+
+// ---- preview
+setInterval(() => { $('#preview').src = '/api/preview.jpg?w=520&t=' + Date.now(); }, 500);
+$('#preview').onload = e => { const i = e.target; i.classList.toggle('landscape', i.naturalWidth > i.naturalHeight); };
+
+// ---- status
+async function poll() {
+  try {
+    const s = await api('/api/status');
+    engine = s.kiosk.engine || engine;
+    $('#c-engine').innerHTML = 'kiosk on <b>Engine ' + (s.kiosk.engine || '?') + '</b>';
+    $('#c-b').className = 'chip ' + (s.b.up ? 'ok' : 'bad'); $('#c-b').innerHTML = 'B ' + (s.b.up ? `<b>${s.b.fps ?? '–'} fps</b> ${s.b.lifecycle || ''} ${s.b.resolution || ''}` : 'down');
+    const ap = s.a.pipeline || {}; $('#c-a').className = 'chip ' + (s.a.up ? 'ok' : 'bad'); $('#c-a').innerHTML = 'A ' + (s.a.up ? `<b>${ap.status || ''}</b> ${ap.pipeline_id || ''}` : 'down');
+    const g = s.gpu; $('#c-gpu').innerHTML = g.mem_used ? `GPU <b>${g.mem_used}/${g.mem_total} MB</b> ${g.util}% ${g.temp}°C` : 'GPU ?';
+    $('#c-kiosk').className = 'chip ' + (s.kiosk.active ? (s.kiosk.ws === 1 ? 'ok' : 'warn') : 'bad'); $('#c-kiosk').innerHTML = 'kiosk ' + (s.kiosk.active ? (s.kiosk.ws === 1 ? '<b>streaming</b>' : (s.kiosk.ws === -1 ? 'page up' : 'reconnecting…')) : 'down');
+    $('#c-show').className = 'chip ' + (s.showmode.on ? 'ok' : ''); $('#c-show').innerHTML = 'show mode <b>' + (s.showmode.on ? 'ON' : 'off') + '</b>';
+    $('#c-time').textContent = s.time;
+    $('#knobs-engine').textContent = 'Engine ' + engine; $('#knobs-b').classList.toggle('hide', engine !== 'B'); $('#knobs-a').classList.toggle('hide', engine !== 'A');
+    $('#neg-hint').textContent = engine === 'B' ? 'Engine B: rebuilds the pipeline, ~20 s black' : 'Engine A: live';
+    if (s.b.up && !filled) {       // fill the fields once from the engine's current state
+      filled = true;
+      $('#prompt').value = s.b.prompt || ''; const neg = (s.b.negative || '').split(',').map(x => x.trim()).filter(x => x && !SAFETY.includes(x)); $('#negative').value = neg.join(', ');
+      if (s.b.control_scale != null) setRange('control', s.b.control_scale);
+      if (s.b.guidance_scale != null) setRange('guidance', s.b.guidance_scale); if (s.b.delta != null) setRange('delta', s.b.delta);
+      if (s.b.seed != null) $('#k-seed').value = s.b.seed; if (s.b.t_index_list) { $('#v-tindex').textContent = JSON.stringify(s.b.t_index_list); setSteps(s.b.t_index_list.length, false); }
+    }
+    flickerOn = !!s.b.flicker; $('#flicker').textContent = 'Flicker ' + (flickerOn ? 'ON' : 'OFF'); $('#flicker').classList.toggle('on', flickerOn);
+    if (s.log && s.log.length) { const last = s.log[s.log.length - 1]; if (!logEl.dataset.last || logEl.dataset.last !== last) { logEl.dataset.last = last; say('[server] ' + last); } }
+  } catch (e) { $('#c-time').textContent = 'panel unreachable'; }
+}
+const SAFETY = ['nudity','naked','nsfw','sexual','explicit','gore','blood','wounds','mutilation'];
+setInterval(poll, 2000); poll();
+
+// ---- prompts
+$('#prompt').oninput = () => $('#prompt').classList.add('dirty'); $('#negative').oninput = () => $('#negative').classList.add('dirty');
+async function applyPrompt() { const p = $('#prompt').value.trim(); if (!p) return; const r = await api(engine === 'A' ? '/api/a/prompt' : '/api/b/prompt', {prompt: p}); $('#prompt').classList.remove('dirty'); say('prompt applied ' + (r.ok ? '✓' : '✗ ' + r.error)); }
+async function applyNegative() { const n = $('#negative').value.trim(); $('#apply-negative').disabled = true; const r = await api('/api/b/negative', {negative: n}); $('#apply-negative').disabled = false; $('#negative').classList.remove('dirty'); say('negative applied ' + (r.ok ? '✓ (rebuilding…)' : '✗ ' + r.error)); }
+$('#apply-prompt').onclick = applyPrompt; $('#apply-negative').onclick = applyNegative;
+$('#prompt').onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) applyPrompt(); };
+
+// ---- presets
+api('/api/presets').then(d => { const box = $('#presets'); d.presets.forEach(p => { const b = document.createElement('button'); b.innerHTML = `<b>${p.name}</b><small>${p.notes || ''}</small>`; b.onclick = async () => { b.disabled = true; const r = await api('/api/preset/apply', {name: p.name, engine}); b.disabled = false; say('preset ' + p.name + (r.ok ? ' ✓' : ' ✗ ' + r.error)); filled = false; }; box.appendChild(b); }); });
+
+// ---- knobs B
+let steps = 1; const debounce = (f, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => f(...a), ms); }; };
+function setRange(id, v) { $('#k-' + id).value = v; $('#v-' + id).textContent = (+v).toFixed(2); }
+function setSteps(n, send = true) { steps = n; document.querySelectorAll('#k-steps button').forEach(b => b.classList.toggle('on', +b.dataset.v === n)); if (send) sendB({steps: n, strength: +$('#k-strength').value}); }
+document.querySelectorAll('#k-steps button').forEach(b => b.onclick = () => setSteps(+b.dataset.v));
+const sendB = debounce(async body => { const r = await api('/api/b/params', body); if (r.ok && r.result.params && r.result.params.updated_params && r.result.params.updated_params.t_index_list) $('#v-tindex').textContent = JSON.stringify(r.result.params.updated_params.t_index_list); if (!r.ok) say('params ✗ ' + r.error); }, 180);
+for (const id of ['control', 'strength', 'guidance', 'delta']) { $('#k-' + id).oninput = e => { $('#v-' + id).textContent = (+e.target.value).toFixed(2); const v = +e.target.value; sendB(id === 'control' ? {control_scale: v} : id === 'strength' ? {steps, strength: v} : id === 'guidance' ? {guidance_scale: v} : {delta: v}); }; }
+$('#seed-apply').onclick = () => sendB({seed: +$('#k-seed').value}); $('#seed-random').onclick = () => { $('#k-seed').value = Math.floor(Math.random() * 2e9); sendB({seed: +$('#k-seed').value}); };
+$('#flicker').onclick = async () => { const r = await api('/api/b/flicker', {on: !flickerOn, ms: 150}); flickerOn = r.result.on; $('#flicker').textContent = 'Flicker ' + (flickerOn ? 'ON' : 'OFF'); $('#flicker').classList.toggle('on', flickerOn); };
+
+// ---- knobs A
+const sendA = debounce(async body => { const r = await api('/api/a/params', body); if (!r.ok) say('A params ✗ ' + r.error); }, 180);
+$('#k-noise').oninput = e => { $('#v-noise').textContent = (+e.target.value).toFixed(2); sendA({noise_scale: +e.target.value}); };
+$('#k-vace').oninput = e => { $('#v-vace').textContent = (+e.target.value).toFixed(2); sendA({vace_context_scale: +e.target.value}); };
+$('#vace-toggle').onclick = () => { vaceOn = !vaceOn; $('#vace-toggle').textContent = 'VACE ' + (vaceOn ? 'ON' : 'OFF'); sendA({vace_enabled: vaceOn, vace_use_input_video: vaceOn}); };
+$('#a-reset').onclick = async () => { const r = await api('/api/a/reset'); say('A reset ' + (r.ok ? '✓' : '✗')); };
+
+// ---- ops
+document.querySelectorAll('[data-op]').forEach(b => b.onclick = async () => { b.disabled = true; say(b.dataset.op + ' …'); const r = await api('/api/ops', {action: b.dataset.op}); b.disabled = false; say(b.dataset.op + ': ' + (r.ok ? String(r.result).slice(-160) : '✗ ' + r.error)); filled = false; });
+</script>
+</body></html>

@@ -1,0 +1,17 @@
+# systemd --user unit for the technician panel. Install (as kxkm):
+#   ln -sf /ai/VideoBooth/panel/booth-panel.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now booth-panel.service
+# Reach it from the LAN / tailnet: http://<box>:7870  (no auth — LAN only, by decision 2026-09-04)
+[Unit]
+Description=VideoBooth technician panel (http://0.0.0.0:7870)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/ai/VideoBooth
+ExecStart=/usr/bin/python3 /ai/VideoBooth/panel/server.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
