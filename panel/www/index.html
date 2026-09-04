@@ -88,7 +88,8 @@
     <div class="row">
       <button id="preset-save-new">Save as NEW preset</button>
       <button id="preset-update" disabled>Update loaded preset</button>
-      <span class="hint">saves what the boxes and knobs show now. Update asks for a confirm and only touches the preset last loaded.</span>
+      <button id="preset-remove" class="danger" disabled>Remove</button>
+      <span class="hint">saves what the boxes and knobs show now. Update and Remove ask for a confirm and only touch the preset last loaded.</span>
     </div>
   </section>
 
@@ -152,7 +153,7 @@ async function poll() {
     $('#switch-status').textContent = sw.running ? `switching to ${sw.target}: ${sw.step}` : (sw.error ? 'last switch failed: ' + sw.error : (s.kiosk.engine === 'OFF' ? 'STOPPED — screen black, engines down' : s.kiosk.engine ? `visitor screen on Engine ${s.kiosk.engine}` + (s.kiosk.ws === 1 ? ' — streaming' : ' — not streaming yet') : 'kiosk page unknown'));
     $('#c-engine').innerHTML = s.kiosk.engine === 'OFF' ? 'kiosk <b>STOPPED</b>' : 'kiosk on <b>Engine ' + (s.kiosk.engine || '?') + '</b>';
     if (engine === 'OFF') engine = 'B';
-    loadedPreset = s.loaded_preset || loadedPreset; $('#loaded-preset').textContent = loadedPreset ? '· loaded: ' + loadedPreset : ''; $('#preset-update').disabled = !loadedPreset; $('#preset-update').textContent = loadedPreset ? `Update "${loadedPreset}"` : 'Update loaded preset';
+    loadedPreset = s.loaded_preset || loadedPreset; $('#loaded-preset').textContent = loadedPreset ? '· loaded: ' + loadedPreset : ''; $('#preset-update').disabled = !loadedPreset; $('#preset-update').textContent = loadedPreset ? `Update "${loadedPreset}"` : 'Update loaded preset'; $('#preset-remove').disabled = !loadedPreset;
     $('#c-time').textContent = s.time;
     $('#knobs-engine').textContent = 'Engine ' + engine; $('#knobs-b').classList.toggle('hide', engine !== 'B'); $('#knobs-a').classList.toggle('hide', engine !== 'A');
     $('#neg-hint').textContent = engine === 'B' ? 'Engine B: rebuilds the pipeline, ~20 s black' : 'Engine A: live';
@@ -197,6 +198,8 @@ function currentValues() {
 }
 $('#preset-save-new').onclick = async () => { const name = $('#preset-name').value.trim(); if (!name) { say('give the preset a name first'); $('#preset-name').focus(); return; }
   const r = await api('/api/presets/save', {name, mode: 'new', values: currentValues(), notes: $('#preset-notes').value.trim()}); say(r.ok && !r.result.error ? `saved new preset "${name}"` : '✗ ' + (r.error || r.result.error)); if (r.ok && !r.result.error) { loadedPreset = name; loadPresets(); } };
+$('#preset-remove').onclick = async () => { if (!loadedPreset) return; if (!confirm(`Remove preset "${loadedPreset}"? (a dated backup of the presets file is kept on the box)`)) return;
+  const r = await api('/api/presets/remove', {name: loadedPreset}); say(r.ok && !r.result.error ? `removed "${loadedPreset}"` : '✗ ' + (r.error || r.result.error)); if (r.ok && !r.result.error) { loadedPreset = null; loadPresets(); } };
 $('#preset-update').onclick = async () => { if (!loadedPreset) return; if (!confirm(`Overwrite preset "${loadedPreset}" with the current prompt, negative and knobs?`)) return;
   const r = await api('/api/presets/save', {name: loadedPreset, mode: 'update', values: currentValues(), notes: $('#preset-notes').value.trim()}); say(r.ok && !r.result.error ? `updated "${loadedPreset}"` : '✗ ' + (r.error || r.result.error)); if (r.ok && !r.result.error) loadPresets(); };
 

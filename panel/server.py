@@ -359,6 +359,19 @@ def save_preset(name, values, mode, notes=''):
     return {'saved': name, 'mode': mode, 'count': len(items)}
 
 
+def remove_preset(name):
+    with PRESET_LOCK:
+        d = presets(); before = len(d['presets']); d['presets'] = [x for x in d['presets'] if x['name'] != name]
+        if len(d['presets']) == before:
+            return {'error': f'no preset "{name}"'}
+        os.replace(PRESETS_FILE, PRESETS_FILE + '.bak-' + time.strftime('%Y%m%d-%H%M%S'))
+        tmp = PRESETS_FILE + '.tmp'
+        with open(tmp, 'w') as f: json.dump(d, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, PRESETS_FILE)
+    if LOADED_PRESET['name'] == name: LOADED_PRESET['name'] = None
+    log(f'preset removed: {name}'); return {'removed': name, 'count': len(d['presets'])}
+
+
 def apply_preset(name, engine):
     p = next((x for x in presets()['presets'] if x['name'] == name), None)
     if not p:
@@ -541,6 +554,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             elif p == '/api/ops':          r = ops(body['action'], body.get('arg')); log(f"ops {body['action']}: {str(r)[-80:]}")
             elif p == '/api/switch':       r = start_switch(body.get('engine', 'B').upper())
             elif p == '/api/presets/save': r = save_preset(body.get('name'), body.get('values', {}), body.get('mode', 'new'), body.get('notes'))
+            elif p == '/api/presets/remove': r = remove_preset(body.get('name', ''))
             else:                          return self._json({'error': 'unknown endpoint'}, 404)
             self._json({'ok': True, 'result': r})
         except Exception as e:  # noqa: BLE001
