@@ -7,4 +7,6 @@ set -euo pipefail
 cd "$SD_DIR/demo/realtime-img2img"
 echo "StreamDiffusion @ $(git -C "$SD_DIR" rev-parse --short HEAD) — config $SD_CONFIG"
 exec "$SD_DIR/.venv/bin/python" main.py --acceleration tensorrt --controlnet-config "$SD_CONFIG" \
-  --host 0.0.0.0 --port "$SD_PORT" --engine-dir "$SD_TRT_ENGINES" "$@"
+  --host 0.0.0.0 --port "$SD_PORT" --engine-dir "$SD_TRT_ENGINES" --timeout 0 "$@"
+# --timeout 0: the demo's websocket loop never refreshes its last_time, so any positive
+# timeout ends every session after that many seconds — fatal for a show.
