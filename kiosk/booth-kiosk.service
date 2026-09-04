@@ -16,6 +16,7 @@ ExecStart=/ai/VideoBooth/kiosk/booth-kiosk.sh
 ExecStopPost=/bin/sh -c 'pkill -u "$USER" -f -- "--user-data-dir=.*booth-kiosk" || true'
 Restart=always
 RestartSec=3
+TimeoutStopSec=15
 
 [Install]
 WantedBy=graphical-session.target

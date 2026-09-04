@@ -40,7 +40,11 @@ fi
 # not the browser, and a relaunch would only add a tab to the survivor. Kill by profile path
 # (ours alone) before every launch and when this script exits.
 kill_browser() { pkill -u "$USER" -f -- "--user-data-dir=$PROFILE" 2>/dev/null && sleep 2; pkill -9 -u "$USER" -f -- "--user-data-dir=$PROFILE" 2>/dev/null; return 0; }
-trap 'kill_browser; kill $WWW_PID 2>/dev/null' EXIT INT TERM
+# On TERM/INT: kill the browser and the static server, then EXIT — without the exit, bash
+# would resume the loop after the trap and relaunch Chromium, and a unit stop would hang
+# until systemd's stop timeout.
+trap 'kill_browser; kill $WWW_PID 2>/dev/null; exit 0' INT TERM
+trap 'kill_browser; kill $WWW_PID 2>/dev/null' EXIT
 while true; do
   kill_browser
   rm -f "$PROFILE/SingletonLock" 2>/dev/null
