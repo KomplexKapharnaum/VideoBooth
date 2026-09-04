@@ -41,7 +41,7 @@ class WS:
             resp += c
         if b' 101 ' not in resp.split(b'\r\n', 1)[0]:
             raise ConnectionError(resp.split(b'\r\n', 1)[0].decode(errors='replace'))
-        self.s.settimeout(None)  # the first send_frame only comes once the pipeline (TensorRT engines) is built
+        self.s.settimeout(5)  # short timeout so the main loop can notice a dead MJPEG stream while waiting
 
     def _rd(self, n):
         b = b''
@@ -71,8 +71,12 @@ class WS:
         self._send(0x2, data)
 
     def recv_json(self):
+        """Next text frame, or None on a read timeout (the caller re-checks the sink and loops)."""
         while True:
-            b1, b2 = self._rd(2)
+            try:
+                b1, b2 = self._rd(2)
+            except socket.timeout:
+                return None
             n = b2 & 0x7f
             if n == 126:
                 n = struct.unpack('>H', self._rd(2))[0]
@@ -191,6 +195,7 @@ def main():
     ap.add_argument('--flash-len', type=float, default=0.25)
     ap.add_argument('--flash-threshold', type=float, default=60.0, help='brightness jump (0-255) that counts as a flash')
     ap.add_argument('--stall-ms', type=float, default=250)
+    ap.add_argument('--build-timeout', type=float, default=2400, help='seconds to wait for the first output frame (engine build)')
     ap.add_argument('--label', default='')
     ap.add_argument('--json', help='write raw samples + stats here')
     a = ap.parse_args()
@@ -229,6 +234,12 @@ def main():
             msg = ws.recv_json()
         except EOFError:
             print('websocket closed by server', file=sys.stderr); break
+        if msg is None:
+            if sink.err:
+                break
+            if not sink.first_at and time.perf_counter() - start > a.build_timeout:
+                print(f'no output frame after {a.build_timeout:.0f}s', file=sys.stderr); break
+            continue
         st = msg.get('status')
         if st == 'send_frame':
             jpeg = src.get()

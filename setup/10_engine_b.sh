@@ -23,6 +23,9 @@ cd "$SD_DIR"
 uv pip install "torch==2.8.0" "torchvision==0.23.0" --index-url https://download.pytorch.org/whl/cu128
 uv pip install -e ".[tensorrt,controlnet,ipadapter]"
 python -m streamdiffusion.tools.install-tensorrt
+# The fork's TensorRT path does `from cuda import cudart`, which cuda-python 13 removed
+# (namespace moved to cuda.bindings) → "Acceleration has failed" at pipeline creation. Pin 12.x.
+uv pip install "cuda-python<13"
 python - <<'PY'
 import torch, streamdiffusion
 print("torch", torch.__version__, "cuda", torch.version.cuda, "gpu", torch.cuda.get_device_name(0))
