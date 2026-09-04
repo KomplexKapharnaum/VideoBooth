@@ -1,20 +1,13 @@
-From: VideoBooth <videobooth@kxkm.net>
-Subject: [PATCH] realtime-img2img: accept negative_prompt in POST /api/params (live, no rebuild)
-
-The library's update_stream_params() already takes negative_prompt (re-encodes the prompt
-embeddings), and AppState.update_parameter('negative_prompt') exists, but no route exposed it:
-the only way to change the negative was a config re-upload, which destroys and rebuilds the
-pipeline (~20 s black). Three lines: forward the key like the others.
----
- demo/realtime-img2img/routes/parameters.py | 2 ++
- 1 file changed, 2 insertions(+)
-
 diff --git a/demo/realtime-img2img/routes/parameters.py b/demo/realtime-img2img/routes/parameters.py
+index 77f8755..7a6431b 100644
 --- a/demo/realtime-img2img/routes/parameters.py
 +++ b/demo/realtime-img2img/routes/parameters.py
-@@ -57,6 +57,8 @@ async def update_params(request: Request, app_instance=Depends(get_app_instance)
+@@ -75,6 +75,8 @@ async def update_params(request: Request, app_instance=Depends(get_app_instance)
+             params["num_inference_steps"] = int(data["num_inference_steps"])
+         if "seed" in data:
              params["seed"] = int(data["seed"])
 +        if "negative_prompt" in data:
 +            params["negative_prompt"] = str(data["negative_prompt"])
          if "t_index_list" in data:
              t_index_list = data["t_index_list"]
+             if isinstance(t_index_list, list) and all(isinstance(x, int) for x in t_index_list):

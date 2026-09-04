@@ -116,6 +116,7 @@ The box goes back to being the research machine. Leave the kiosk unit enabled or
 | Every session drops after N seconds | demo `--timeout` bug → `run.sh` passes `--timeout 0`; keep it |
 | Port 7860 in use | old server: `tmux ls`, `ss -tlnp \| grep 7860` |
 | Kiosk restart piles up tabs / an old page keeps streaming | the snap browser escapes the unit's cgroup; `booth-kiosk.sh` now kills the previous instance by profile path before launching (and the unit's `ExecStopPost` on stop). If it happens anyway: `pkill -f -- "--user-data-dir=.*booth-kiosk"` then restart the unit |
+| Preset change stalls Engine B for ~20 s | the demo is unpatched (negative prompt changes rebuild the pipeline): re-run `setup/10_engine_b.sh` (applies `engines/b-streamdiffusion/patches/`) and restart Engine B |
 | Output page black, engine fine | it reconnects every 2 s and after an 8 s stall by itself; check `tools/cdp.py 'window.__booth.ws.readyState'` (1 = open), `.state/logs/kiosk.log`, and that no other page streams from the same server (one stream at a time) |
 | fps fine, latency wanders | another GPU tenant (`showmode status`), or the camera dropping frames (`camera_check`) |
 | HF download fails at start | no internet on the box? `HF_HOME=/ai/VideoBooth/.hf`; local copies of the checkpoints exist in `/ai/data/models` — point `model_id` at them |

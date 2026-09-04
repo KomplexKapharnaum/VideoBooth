@@ -5,9 +5,10 @@ not two configs. This page says what each dial does, where it lives, and what to
 touching it.
 
 The **technician panel** (`http://<box>:7870`, `panel/`) exposes the dials below for the
-engine shown on the kiosk, applies presets, and previews the visitor screen. Engine B's
-negative prompt is the one dial that rebuilds the pipeline (~20 s black); everything else is
-live.
+engine shown on the kiosk, applies presets, and previews the visitor screen. Every dial is
+live, the negative prompt included (a two-line booth patch on the demo,
+`engines/b-streamdiffusion/patches/`); without that patch a negative change rebuilds the
+pipeline (~20 s black).
 
 ## 1. The dials (brief rule 2.4)
 
@@ -17,7 +18,7 @@ live.
 | **Steps** | more steps = cleaner, slower | number of entries in `t_index_list` (1 = one step); UI where exposed | steps setting |
 | **Strength / denoise** | how far from the camera pixels | the *values* in `t_index_list`: lower index = more noise = stronger change (`[24]` ≈ 0.5 one-step, `[18, 32]` two-step) | v2v strength |
 | **Seed lock** | fixed seed = calm; per-frame seed = flicker as texture | `seed` fixed / UI seed | seed |
-| **Negative prompt** | safety terms ALWAYS stay; aesthetic terms ("ugly, deformed") on = clean, off = freaky | `negative_prompt` | negative prompt |
+| **Negative prompt** | safety terms ALWAYS stay; aesthetic terms ("ugly, deformed") on = clean, off = freaky | `negative_prompt` (live with the booth patch) | negative prompt |
 | **Similarity filter** | freezes output while the input is static (saves GPU, can look dead) | `enable_similar_image_filter` + threshold (off at baseline) | — |
 | **Interpolation** | smoother motion, +latency | — | frame interpolation toggle |
 | **Reset** | per-visitor: forget the previous person | none needed (no memory) | stream restart button |

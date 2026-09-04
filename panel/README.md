@@ -25,9 +25,10 @@ dated backup next to the file (last 10).
 Engine B knobs: depth control scale (ControlNet strength, live), steps 1–4 and strength
 0–1 (mapped to the demo's `t_index_list`, live), guidance and delta (live), seed (live) and
 a **flicker** toggle (the panel re-seeds every 150 ms = "seed unlocked"). The negative
-prompt has no live route in the demo: applying it re-uploads the config and the pipeline
-rebuilds in ~20 s (TensorRT engines stay cached); the panel re-applies the live values
-afterwards. The safety terms are always kept in the negative.
+prompt is live too, through the booth's two-line patch on the demo
+(`engines/b-streamdiffusion/patches/`); on an unpatched demo the panel falls back to a config
+re-upload (pipeline rebuild, ~20 s black) and re-applies the live values afterwards. The
+safety terms are always kept in the negative.
 
 Engine A knobs: prompt, noise scale (v2v strength), VACE scale, VACE on/off, per-visitor
 reset (cache), all live through Scope's session parameters.
