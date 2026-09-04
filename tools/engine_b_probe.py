@@ -41,6 +41,7 @@ class WS:
             resp += c
         if b' 101 ' not in resp.split(b'\r\n', 1)[0]:
             raise ConnectionError(resp.split(b'\r\n', 1)[0].decode(errors='replace'))
+        self.s.settimeout(None)  # the first send_frame only comes once the pipeline (TensorRT engines) is built
 
     def _rd(self, n):
         b = b''
