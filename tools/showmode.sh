@@ -54,6 +54,8 @@ on() {
 
 off() {
   [ -f "$STATE" ] || { echo "show mode is not on (nothing recorded to restore)"; return 0; }
+  # a tmux server born inside a service's cgroup dies with that service: start it in its own scope
+  tmux ls >/dev/null 2>&1 || systemd-run --user --scope --unit "booth-tmux-$(date +%s)" --quiet tmux start-server
   while IFS= read -r item; do
     case "$item" in
       unit:*)  echo "start unit ${item#unit:}"; systemctl --user start "${item#unit:}.service" || true;;

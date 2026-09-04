@@ -380,18 +380,24 @@ def apply_preset(name, engine):
 
 
 # ---------------------------------------------------------------- ops
+TMUX_GUARD = ('tmux ls >/dev/null 2>&1 || systemd-run --user --scope --unit "booth-tmux-$(date +%s)" --quiet tmux start-server; ')
+# The tmux server must NOT be born inside this panel's cgroup: a panel restart would then kill
+# every session in it (engines, and VoiceClone — it happened on 2026-09-04). If no tmux server
+# runs, start one in its own transient scope before creating a session.
+
+
 def ops(action, arg=None):
     tools = os.path.join(ROOT, 'tools'); eng = os.path.join(ROOT, 'engines')
     if action == 'showmode_on':   return run(f'{tools}/showmode.sh on', 120)
     if action == 'showmode_off':  return run(f'{tools}/showmode.sh off', 120)
     if action == 'engine_b_stop': return run('tmux kill-session -t booth-b 2>&1; echo stopped')
     if action == 'engine_b_start':
-        return run(f'tmux has-session -t booth-b 2>/dev/null && echo "already running" || (tmux new-session -d -s booth-b "{eng}/b-streamdiffusion/run.sh 2>&1 | tee -a {STATE_DIR}/logs/engine_b_server.log" && echo started)')
+        return run(TMUX_GUARD + f'tmux has-session -t booth-b 2>/dev/null && echo "already running" || (tmux new-session -d -s booth-b "{eng}/b-streamdiffusion/run.sh 2>&1 | tee -a {STATE_DIR}/logs/engine_b_server.log" && echo started)')
     if action == 'engine_a_stop': return run('tmux kill-session -t booth-a 2>&1; echo stopped')
     if action == 'engine_a_start':
-        return run(f'tmux has-session -t booth-a 2>/dev/null && echo "already running" || (tmux new-session -d -s booth-a "{eng}/a-scope/run.sh 2>&1 | tee -a {STATE_DIR}/logs/engine_a_server.log" && echo started)')
+        return run(TMUX_GUARD + f'tmux has-session -t booth-a 2>/dev/null && echo "already running" || (tmux new-session -d -s booth-a "{eng}/a-scope/run.sh 2>&1 | tee -a {STATE_DIR}/logs/engine_a_server.log" && echo started)')
     if action == 'engine_a_free':   # Scope keeps ~22 GB loaded after a session stop: restart it to free the GPU
-        return run(f'tmux kill-session -t booth-a 2>/dev/null; sleep 2; tmux new-session -d -s booth-a "{eng}/a-scope/run.sh 2>&1 | tee -a {STATE_DIR}/logs/engine_a_server.log"; echo "scope restarted (VRAM freed)"')
+        return run(f'tmux kill-session -t booth-a 2>/dev/null; sleep 2; ' + TMUX_GUARD + f'tmux new-session -d -s booth-a "{eng}/a-scope/run.sh 2>&1 | tee -a {STATE_DIR}/logs/engine_a_server.log"; echo "scope restarted (VRAM freed)"')
     if action == 'kiosk_restart': return run('systemctl --user restart --no-block booth-kiosk.service && echo "restart queued"')
     if action in ('kiosk_b', 'kiosk_a', 'kiosk_off', 'kiosk_url'):
         url = {'kiosk_b': KIOSK_B, 'kiosk_a': KIOSK_A, 'kiosk_off': KIOSK_OFF}.get(action, arg)
