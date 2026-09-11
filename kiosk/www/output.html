@@ -3,9 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
-  #out{position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;background:#000}
-  #out.contain{object-fit:contain}
-  #out.mirror{transform:scaleX(-1)}
+  #out{position:fixed;inset:0;width:100vw;height:100vh;background:#000;display:block}
   #cam,#cv{position:fixed;left:-9999px;top:0}
 </style></head>
 <body>
@@ -14,8 +12,10 @@
   What the visitor screen shows: the generated video, nothing else. The page holds the camera
   (getUserMedia, auto-granted by the kiosk Chromium flags), feeds the demo's websocket the
   way its own UI does (server says "send_frame" → we answer "next_frame" + params + one JPEG),
-  and displays /api/stream/<uuid> (multipart MJPEG) full-screen. Reconnects by itself when
-  the engine restarts. The technician drives the look from the demo UI on a laptop (its
+  and displays /api/stream/<uuid> (multipart MJPEG) full-screen — decoded by hand and drawn on a
+  canvas: an <img> fed by multipart MJPEG paints each new part at its natural 512x768 size for one
+  frame before object-fit re-applies (a quarter-size flash on every frame, seen on kxkm-ai2
+  2026-09-11). Reconnects by itself when the engine restarts. The technician drives the look from the demo UI on a laptop (its
   sliders act on the shared pipeline) — never "Start Stream" there.
 
   URL parameters (all optional):
@@ -26,7 +26,7 @@
     mirror=1|0                     mirror the output like a mirror would (default 1)
     q=0.85                         JPEG quality of the frames we send
 -->
-<img id="out" alt="">
+<canvas id="out"></canvas>
 <video id="cam" autoplay playsinline muted></video>
 <canvas id="cv"></canvas>
 <script>
@@ -35,8 +35,8 @@
   const server = (q.get('server') || 'http://127.0.0.1:7860').replace(/\/$/, '');
   const W = +q.get('w') || 512, H = +q.get('h') || 768, quality = +q.get('q') || 0.85;
   const out = document.getElementById('out'), cam = document.getElementById('cam'), cv = document.getElementById('cv');
-  if ((q.get('fit') || 'cover') === 'contain') out.classList.add('contain');
-  if ((q.get('mirror') ?? '1') !== '0') out.classList.add('mirror');
+  const fitContain = (q.get('fit') || 'cover') === 'contain';
+  const mirror = (q.get('mirror') ?? '1') !== '0';
   cv.width = W; cv.height = H; const ctx = cv.getContext('2d', {alpha: false});
   const log = (...a) => console.log('[booth]', ...a);
 
@@ -62,7 +62,58 @@
     return new Promise(res => cv.toBlob(res, 'image/jpeg', quality));
   }
 
-  // --- engine session: one websocket + one MJPEG <img>, forever
+  // --- output: MJPEG bytes → JPEG blobs → ImageBitmap → canvas (cover/contain + mirror), latest frame wins
+  const octx = out.getContext('2d', {alpha: false});
+  function sizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    out.width = Math.round(window.innerWidth * dpr); out.height = Math.round(window.innerHeight * dpr);
+    octx.fillStyle = '#000'; octx.fillRect(0, 0, out.width, out.height);
+  }
+  sizeCanvas(); window.addEventListener('resize', sizeCanvas);
+  let pending = null, drawing = false, framesDrawn = 0;
+  async function drawLatest() {
+    if (drawing) return; drawing = true;
+    while (pending) {
+      const blob = pending; pending = null;
+      try {
+        const bmp = await createImageBitmap(blob);
+        const cw = out.width, ch = out.height, iw = bmp.width, ih = bmp.height;
+        const s = fitContain ? Math.min(cw / iw, ch / ih) : Math.max(cw / iw, ch / ih);
+        const dw = iw * s, dh = ih * s, dx = (cw - dw) / 2, dy = (ch - dh) / 2;
+        if (fitContain) { octx.fillStyle = '#000'; octx.fillRect(0, 0, cw, ch); }
+        octx.save();
+        if (mirror) { octx.translate(cw, 0); octx.scale(-1, 1); }
+        octx.drawImage(bmp, dx, dy, dw, dh);
+        octx.restore(); bmp.close(); framesDrawn++;
+      } catch (e) { /* truncated JPEG at a reconnect: skip it */ }
+    }
+    drawing = false;
+  }
+  let streamAbort = null;
+  async function pumpStream(uid) {
+    if (streamAbort) streamAbort.abort();
+    const ac = new AbortController(); streamAbort = ac;
+    try {
+      const r = await fetch(`${server}/api/stream/${uid}`, {signal: ac.signal, cache: 'no-store'});
+      const reader = r.body.getReader();
+      let buf = new Uint8Array(0);
+      for (;;) {
+        const {value, done} = await reader.read(); if (done) break;
+        const nb = new Uint8Array(buf.length + value.length); nb.set(buf); nb.set(value, buf.length); buf = nb;
+        // JPEG parts: FF D8 … FF D9 (FF D9 never occurs inside entropy-coded data)
+        for (;;) {
+          let soi = -1; for (let i = 0; i + 1 < buf.length; i++) if (buf[i] === 0xFF && buf[i + 1] === 0xD8) { soi = i; break; }
+          if (soi < 0) { buf = new Uint8Array(0); break; }
+          let eoi = -1; for (let i = soi + 2; i + 1 < buf.length; i++) if (buf[i] === 0xFF && buf[i + 1] === 0xD9) { eoi = i + 2; break; }
+          if (eoi < 0) { if (soi > 0) buf = buf.slice(soi); break; }
+          pending = new Blob([buf.slice(soi, eoi)], {type: 'image/jpeg'}); buf = buf.slice(eoi);
+          lastFrameAt = performance.now(); drawLatest();
+        }
+      }
+    } catch (e) { if (e.name !== 'AbortError') log('stream ended', e.message || e); }
+  }
+
+  // --- engine session: one websocket + one MJPEG stream, forever
   const resolutionLabel = `${W}x${H}`;
   let ws, lastFrameAt = 0, watchdog;
   function connect() {
@@ -73,7 +124,7 @@
     ws.onmessage = async (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch { return; }
       if (m.status === 'connected') {
-        out.src = `${server}/api/stream/${uid}`; lastFrameAt = performance.now();
+        pumpStream(uid); lastFrameAt = performance.now();
       } else if (m.status === 'send_frame') {
         lastFrameAt = performance.now();
         const blob = await grab(); if (!blob || ws.readyState !== 1) return;
@@ -85,7 +136,7 @@
       }
     };
     ws.onerror = () => {};
-    ws.onclose = () => { log('ws closed — retry in 2 s'); out.removeAttribute('src'); clearInterval(watchdog); setTimeout(connect, 2000); };
+    ws.onclose = () => { log('ws closed — retry in 2 s'); if (streamAbort) streamAbort.abort(); clearInterval(watchdog); setTimeout(connect, 2000); };
     clearInterval(watchdog);
     watchdog = setInterval(() => {   // engine stalled (no send_frame for 8 s) → reconnect
       if (ws.readyState === 1 && lastFrameAt && performance.now() - lastFrameAt > 8000) { log('stall watchdog'); ws.close(); }
@@ -94,7 +145,7 @@
 
   try { await openCamera(); } catch (e) { log('camera failed', e); setTimeout(() => location.reload(), 5000); return; }
   connect();
-  window.__booth = {get server() { return server; }, get ws() { return ws; }};
+  window.__booth = {get server() { return server; }, get ws() { return ws; }, get frames() { return framesDrawn; }};
 })();
 </script>
 </body></html>
