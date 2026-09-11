@@ -161,11 +161,14 @@ Same fork `4c90d9e`, TensorRT 10.12, torch 2.8 cu128, same `booth_sd15_depth.yam
 **copied** from kxkm-ai (same RTX 4090 + TensorRT version; the ONNX it was built from lives only in
 kxkm-ai's `/ai/data/models`). CPU **turbo off + 253 W cap** (`cpu-stability.service`): the i7-14700K on
 BIOS 2002 with PL1=PL2=4095 W killed the UNet build three times (GPF, invalid opcode, segfault in
-libnvinfer); with the caps it built first try. The pipeline is GPU-bound — the caps cost ~3 fps.
+libnvinfer); with the caps it built first try. **Resolved the same afternoon: the CPU fan was not
+plugged in, and BIOS 3202 with the Intel Default profile caps the package at 253 W** — the full-boost
+rebuild then passed and the numbers match kxkm-ai (second row). `cpu-stability.service` removed.
 
 | when | what | source | fps | frame ms (mean / p95 / max) | sd | stalls | latency (probe flash) |
 |---|---|---|---|---|---|---|---|
 | 2026-09-11 13:48 | B on **kxkm-ai2**, no turbo, 253 W, same config | lavfi 512x768 | **34.6 fps** | 28.9 / 31.2 / 157.5 ms | 7.7 ms | 0 > 250 ms (2076 frames, 60 s) | 0.134 s (min 0.087 / max 0.196 / sd 0.027, n=11) |
+| 2026-09-11 16:15 | B on **kxkm-ai2**, **BIOS 3202 + Intel Default (253 W), turbo on**, CPU fan plugged | lavfi 512x768 | **37.2 fps** | 26.9 / 28.6 / 105.7 ms | 6.5 ms | 0 > 250 ms (2235 frames, 60 s) | 0.113 s (min 0.082 / max 0.160 / sd 0.032, n=10) |
 
 ## Engine A — Scope (LongLive / SDV2, VACE depth)
 

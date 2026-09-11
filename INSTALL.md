@@ -57,9 +57,11 @@ engines/b-streamdiffusion/run.sh                # first run builds the TensorRT 
 On a new box either copy the `.engine` from kxkm-ai (same GPU model + TensorRT version) or fetch the
 ONNX and rebuild. Nothing installs it yet.
 
-**CPU stability (kxkm-ai2):** the i7-14700K on ASUS BIOS 2002 / unlimited PL crashed every TensorRT
-build at boost; `/etc/systemd/system/cpu-stability.service` (turbo off, 253 W) is the interim fix
-until the BIOS is updated and the Intel Default profile set. Engine B is GPU-bound: ~3 fps cost.
+**CPU stability (kxkm-ai2, 2026-09-11):** every TensorRT build died at boost until two things were
+fixed — the CPU fan was not plugged in, and BIOS 2002 ran the i7-14700K with PL1 = PL2 = 4095 W.
+BIOS 3202 + the Intel Default profile (253 W) + the fan: full-boost build passes, 37 fps like kxkm-ai.
+Rule for a new box: Intel Default profile in the BIOS, and check `constraint_0_power_limit_uw`
+reads 253000000 before blaming software.
 
 `run.sh` exposes the venv's `libcudart.so.12` under the bare `libcudart.so` name polygraphy dlopens
 (kxkm-ai got it from the Ubuntu `nvidia-cuda-toolkit` package by accident — an undeclared
