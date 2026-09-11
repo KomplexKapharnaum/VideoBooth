@@ -51,6 +51,16 @@ Set `CAMERA_DEV` in `booth.conf` if the Brio is not video0 (`v4l2-ctl --list-dev
 setup/10_engine_b.sh                            # Python 3.10 venv, torch cu128, fork + TensorRT, demo build
 engines/b-streamdiffusion/run.sh                # first run builds the TensorRT engines (minutes) → http://kxkm-ai:7860
 ```
+**Depth engine (undeclared input, 2026-09-11):** the yaml points at
+`.engines/trt/depth_anything_v2_vits-fp16.engine`, built on kxkm-ai by
+`engines/b-streamdiffusion/build_depth_engine.py` from an ONNX under kxkm-ai's `/ai/data/models`.
+On a new box either copy the `.engine` from kxkm-ai (same GPU model + TensorRT version) or fetch the
+ONNX and rebuild. Nothing installs it yet.
+
+**CPU stability (kxkm-ai2):** the i7-14700K on ASUS BIOS 2002 / unlimited PL crashed every TensorRT
+build at boost; `/etc/systemd/system/cpu-stability.service` (turbo off, 253 W) is the interim fix
+until the BIOS is updated and the Intel Default profile set. Engine B is GPU-bound: ~3 fps cost.
+
 `run.sh` exposes the venv's `libcudart.so.12` under the bare `libcudart.so` name polygraphy dlopens
 (kxkm-ai got it from the Ubuntu `nvidia-cuda-toolkit` package by accident — an undeclared
 dependency that surfaced on kxkm-ai2 as "Acceleration has failed"). No CUDA toolkit needed.

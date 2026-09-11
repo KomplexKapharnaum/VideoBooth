@@ -155,6 +155,18 @@ Chromium on the same GPU) and glass-to-glass; the synthetic source is not a pers
 First-run build times: UNet+ControlNet TensorRT engine 203 s, VAE encoder/decoder ~20 s each,
 ControlNet engine ~1 min; cached under `.engines/trt/`.
 
+### 2026-09-11 13:48 — kxkm-ai2, the production box (fresh Ubuntu 24.04.5, same stack, CPU throttled)
+
+Same fork `4c90d9e`, TensorRT 10.12, torch 2.8 cu128, same `booth_sd15_depth.yaml`. Depth engine
+**copied** from kxkm-ai (same RTX 4090 + TensorRT version; the ONNX it was built from lives only in
+kxkm-ai's `/ai/data/models`). CPU **turbo off + 253 W cap** (`cpu-stability.service`): the i7-14700K on
+BIOS 2002 with PL1=PL2=4095 W killed the UNet build three times (GPF, invalid opcode, segfault in
+libnvinfer); with the caps it built first try. The pipeline is GPU-bound — the caps cost ~3 fps.
+
+| when | what | source | fps | frame ms (mean / p95 / max) | sd | stalls | latency (probe flash) |
+|---|---|---|---|---|---|---|---|
+| 2026-09-11 13:48 | B on **kxkm-ai2**, no turbo, 253 W, same config | lavfi 512x768 | **34.6 fps** | 28.9 / 31.2 / 157.5 ms | 7.7 ms | 0 > 250 ms (2076 frames, 60 s) | 0.134 s (min 0.087 / max 0.196 / sd 0.027, n=11) |
+
 ## Engine A — Scope (LongLive / SDV2, VACE depth)
 
 ### 2026-09-04 14:52 — first baselines, headless session on clips (engine-side, no browser)
