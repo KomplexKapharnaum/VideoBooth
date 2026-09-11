@@ -11,6 +11,15 @@ set -uo pipefail
 . "$(dirname "$0")/../../setup/env.sh"
 [ -x "$SD_DIR/.venv/bin/python" ] || { echo "not installed: setup/10_engine_b.sh"; exit 1; }
 cd "$SD_DIR/demo/realtime-img2img"
+# polygraphy (TensorRT path) dlopens the UNVERSIONED libcudart.so. kxkm-ai had it from the
+# Ubuntu nvidia-cuda-toolkit package (CUDA 12.0) — an undeclared dependency found on kxkm-ai2
+# 2026-09-11 ("Acceleration has failed" / OSError: libcudart.so). The venv already ships
+# libcudart.so.12 with torch cu128: expose it under the bare name and put it on the path.
+CUDART_DIR=$(ls -d "$SD_DIR"/.venv/lib/python*/site-packages/nvidia/cuda_runtime/lib 2>/dev/null | head -1)
+if [ -n "$CUDART_DIR" ]; then
+  [ -e "$CUDART_DIR/libcudart.so" ] || ln -s libcudart.so.12 "$CUDART_DIR/libcudart.so"
+  export LD_LIBRARY_PATH="$CUDART_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
 echo "StreamDiffusion @ $(git -C "$SD_DIR" rev-parse --short HEAD) — config $SD_CONFIG"
 "$SD_DIR/.venv/bin/python" main.py --acceleration tensorrt --controlnet-config "$SD_CONFIG" \
   --host 0.0.0.0 --port "$SD_PORT" --engine-dir "$SD_TRT_ENGINES" --timeout 0 "$@" &

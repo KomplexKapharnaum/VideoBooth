@@ -12,6 +12,11 @@ C=$(command -v google-chrome-stable || command -v google-chrome || command -v ch
 command -v uv >/dev/null && ok "uv" || ko "uv"
 [ -c "$CAMERA_DEV" ] && [ -r "$CAMERA_DEV" ] && ok "camera $CAMERA_DEV readable" || ko "camera $CAMERA_DEV missing or not readable"
 [ -x "$SD_DIR/.venv/bin/python" ] && "$SD_DIR/.venv/bin/python" -c "import streamdiffusion, tensorrt" 2>/dev/null && ok "engine B venv imports streamdiffusion+tensorrt" || warn "engine B not installed (setup/10_engine_b.sh)"
+CUDART_DIR=$(ls -d "$SD_DIR"/.venv/lib/python*/site-packages/nvidia/cuda_runtime/lib 2>/dev/null | head -1)
+if [ -x "$SD_DIR/.venv/bin/python" ]; then
+  LD_LIBRARY_PATH="${CUDART_DIR:-/nonexistent}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$SD_DIR/.venv/bin/python" -c "import ctypes; ctypes.CDLL('libcudart.so')" 2>/dev/null \
+    && ok "libcudart.so resolvable (TensorRT/polygraphy)" || ko "libcudart.so not found — run.sh links it in the venv; else apt install nvidia-cuda-toolkit"
+fi
 [ -d "$SCOPE_DIR/.venv" ] && ok "engine A built ($SCOPE_DIR)" || warn "engine A not installed (setup/20_engine_a.sh)"
 for p in $SD_PORT $SCOPE_PORT; do ss -tln | grep -q ":$p " && warn "port $p in use (engine running?)" || ok "port $p free"; done
 grep -qs "AutomaticLoginEnable=True" /etc/gdm3/custom.conf && ok "GDM autologin" || warn "GDM autologin off (kiosk needs a logged-in session)"

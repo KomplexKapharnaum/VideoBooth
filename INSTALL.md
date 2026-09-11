@@ -51,6 +51,9 @@ Set `CAMERA_DEV` in `booth.conf` if the Brio is not video0 (`v4l2-ctl --list-dev
 setup/10_engine_b.sh                            # Python 3.10 venv, torch cu128, fork + TensorRT, demo build
 engines/b-streamdiffusion/run.sh                # first run builds the TensorRT engines (minutes) → http://kxkm-ai:7860
 ```
+`run.sh` exposes the venv's `libcudart.so.12` under the bare `libcudart.so` name polygraphy dlopens
+(kxkm-ai got it from the Ubuntu `nvidia-cuda-toolkit` package by accident — an undeclared
+dependency that surfaced on kxkm-ai2 as "Acceleration has failed"). No CUDA toolkit needed.
 
 ## 5. Engine A — Scope (kxkm, > 10 GB of weights on first run: ask first)
 ```bash
