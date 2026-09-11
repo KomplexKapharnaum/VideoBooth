@@ -28,7 +28,10 @@ KIOSK_HTTP_PORT=7861                           # kiosk/www served on 127.0.0.1 b
 KIOSK_URL=${KIOSK_URL:-http://127.0.0.1:$KIOSK_HTTP_PORT/output.html?server=http://127.0.0.1:$SD_PORT}   # output-only page for Engine B; the panel rewrites it in booth.conf
 KIOSK_ROTATE=${KIOSK_ROTATE:-left}             # normal | left | right | inverted (xrandr)
 KIOSK_MODE=${KIOSK_MODE:-}                     # e.g. 3840x2160 ; empty = panel native (--auto)
-KIOSK_OUTPUT=${KIOSK_OUTPUT:-}                 # xrandr output name; empty = first connected
+KIOSK_OUTPUT=${KIOSK_OUTPUT:-}                 # xrandr output name; empty = the connected output with the largest physical width (the TV)
+KIOSK_TV_MIN_MM=${KIOSK_TV_MIN_MM:-900}        # rotate only a panel at least this wide (mm) — a control monitor stays landscape
+KIOSK_ROTATE_ALWAYS=${KIOSK_ROTATE_ALWAYS:-0}  # 1 = rotate whatever output is picked (old behaviour)
+KIOSK_LOCKED=${KIOSK_LOCKED:-0}                # 1 = Chromium --kiosk (locked); 0 = fullscreen at start, F11 toggles
 CDP_PORT=${CDP_PORT:-9222}                        # Chrome DevTools port used by tools/fps_probe.py and the panel preview
 PANEL_PORT=7870                                # technician panel (panel/server.py), LAN, no auth
 

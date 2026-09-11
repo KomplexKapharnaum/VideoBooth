@@ -248,7 +248,7 @@ class Screencast:
     def _run(self):
         try:
             ws = cdp.WS(cdp.page()['webSocketDebuggerUrl']); ws.s.settimeout(5)
-            ws.call('Page.enable'); ws.call('Page.startScreencast', format='jpeg', quality=60, maxWidth=540, maxHeight=960, everyNthFrame=1)
+            ws.call('Page.enable'); ws.call('Page.startScreencast', format='jpeg', quality=int(ENV.get('PREVIEW_QUALITY', '70')), maxWidth=int(ENV.get('PREVIEW_MAX_W', '1080')), maxHeight=int(ENV.get('PREVIEW_MAX_H', '1920')), everyNthFrame=1)
             idle = 0
             while True:
                 with self.lock:

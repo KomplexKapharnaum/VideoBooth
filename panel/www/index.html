@@ -124,11 +124,13 @@ function setPreviewMode(m) {
   previewMode = m; document.querySelectorAll('#preview-mode button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
   clearInterval(previewTimer); previewTimer = null;
   if (m === 'full') { $('#preview').src = '/api/preview.mjpg?t=' + Date.now(); }
-  else { $('#preview').src = ''; previewTimer = setInterval(() => { $('#preview').src = '/api/preview.jpg?w=520&t=' + Date.now(); }, 500); }
+  else {   // snapshot mode: preload off-screen, swap only once decoded — a bare src swap blanks the <img> between loads (blink every 500 ms, 2026-09-11)
+    previewTimer = setInterval(() => { const im = new Image(); im.onload = () => { $('#preview').src = im.src; }; im.src = '/api/preview.jpg?w=520&t=' + Date.now(); }, 500);
+  }
 }
 document.querySelectorAll('#preview-mode button').forEach(b => b.onclick = () => setPreviewMode(b.dataset.mode));
 setPreviewMode('2');
-$('#preview').onload = e => { const i = e.target; i.classList.toggle('landscape', i.naturalWidth > i.naturalHeight); };
+$('#preview').onload = e => { const i = e.target, land = i.naturalWidth > i.naturalHeight; if (i.classList.contains('landscape') !== land) i.classList.toggle('landscape', land); };
 $('#preview').onerror = () => { if (previewMode === 'full') setTimeout(() => setPreviewMode('full'), 2000); };
 // full-rate watchdog: if the stream stops delivering (kiosk restarted), reopen it
 let lastPaint = Date.now(); $('#preview').addEventListener('load', () => { lastPaint = Date.now(); });

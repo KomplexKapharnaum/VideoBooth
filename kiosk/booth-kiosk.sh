@@ -18,11 +18,27 @@ mkdir -p "$PROFILE"
 # Display: no blanking, native mode (or KIOSK_MODE), portrait rotation.
 xset s off; xset s noblank; xset -dpms 2>/dev/null || true
 command -v gsettings >/dev/null && { gsettings set org.gnome.desktop.session idle-delay 0; gsettings set org.gnome.desktop.screensaver lock-enabled false; } 2>/dev/null || true
-OUT=${KIOSK_OUTPUT:-$(xrandr 2>/dev/null | awk '/ connected/{print $1; exit}')}
-if [ -n "$OUT" ]; then
-  if [ -n "$KIOSK_MODE" ]; then xrandr --output "$OUT" --mode "$KIOSK_MODE" --rotate "$KIOSK_ROTATE"; else xrandr --output "$OUT" --auto --rotate "$KIOSK_ROTATE"; fi
-  echo "display $OUT: $(xrandr | awk -v o="$OUT" '$1==o{print $3, $4, $5}') rotate=$KIOSK_ROTATE"
+# Which output is the visitor screen? KIOSK_OUTPUT names it; empty = the connected output with
+# the largest physical width (the 55" TV, ~1210 mm, beats any control monitor). Portrait rotation
+# is applied ONLY to a TV-class panel (physical width >= KIOSK_TV_MIN_MM, default 900 mm): on the
+# bench, with just the control monitor plugged, the desktop stays landscape (Thomas 2026-09-11).
+out_mm() { xrandr 2>/dev/null | awk -v o="$1" '$1==o{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+mm$/){print $i+0; exit}}'; }
+if [ -n "${KIOSK_OUTPUT:-}" ]; then OUT=$KIOSK_OUTPUT; else
+  OUT=$(xrandr 2>/dev/null | awk '/ connected/{name=$1; mm=0; for(i=1;i<=NF;i++) if($i ~ /^[0-9]+mm$/){mm=$i+0; break}; print mm, name}' | sort -rn | head -1 | awk '{print $2}')
 fi
+OUT_MM=$(out_mm "${OUT:-}"); OUT_MM=${OUT_MM:-0}
+ROT=$KIOSK_ROTATE
+if [ "$OUT_MM" -lt "${KIOSK_TV_MIN_MM:-900}" ] && [ "${KIOSK_ROTATE_ALWAYS:-0}" != 1 ]; then ROT=normal; fi
+WIN_POS=0,0
+if [ -n "${OUT:-}" ]; then
+  if [ -n "$KIOSK_MODE" ]; then xrandr --output "$OUT" --mode "$KIOSK_MODE" --rotate "$ROT"; else xrandr --output "$OUT" --auto --rotate "$ROT"; fi
+  # put the browser window on that output (multi-head: the control monitor keeps the desktop)
+  WIN_POS=$(xrandr | awk -v o="$OUT" '$1==o{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+\+[0-9]+\+[0-9]+$/){split($i,a,"+"); print a[2]","a[3]; exit}}'); WIN_POS=${WIN_POS:-0,0}
+  echo "display $OUT (${OUT_MM} mm wide): $(xrandr | awk -v o="$OUT" '$1==o{print $3, $4, $5}') rotate=$ROT window at $WIN_POS"
+fi
+# KIOSK_LOCKED=1 → Chromium --kiosk (no way out without a keyboard shortcut). Default 0: fullscreen
+# at start, F11 toggles it — the technician can drop out and back on the TV (Thomas 2026-09-11).
+if [ "${KIOSK_LOCKED:-0}" = 1 ]; then FS_FLAGS="--kiosk --start-fullscreen"; else FS_FLAGS="--start-fullscreen"; fi
 command -v unclutter >/dev/null && pgrep -x unclutter >/dev/null || unclutter --timeout 1 --fork 2>/dev/null || true
 
 # Serve kiosk/www (the output-only page) on 127.0.0.1:$KIOSK_HTTP_PORT — the snap-confined
@@ -48,7 +64,7 @@ trap 'kill_browser; kill $WWW_PID 2>/dev/null' EXIT
 while true; do
   kill_browser
   rm -f "$PROFILE/SingletonLock" 2>/dev/null
-  "$CHROME" --kiosk --incognito --start-fullscreen --window-position=0,0 --no-first-run --noerrdialogs \
+  "$CHROME" $FS_FLAGS --incognito --window-position="$WIN_POS" --no-first-run --noerrdialogs \
     --disable-infobars --disable-session-crashed-bubble --disable-features=TranslateUI \
     --autoplay-policy=no-user-gesture-required --auto-accept-camera-and-microphone-capture \
     --overscroll-history-navigation=0 --check-for-update-interval=31536000 \

@@ -5,3 +5,6 @@
 # KIOSK_MODE=3840x2160
 # SCOPE_REF=<commit that passed the bench>
 # SD_REF=<commit that passed the bench>
+# KIOSK_OUTPUT=HDMI-0        # visitor screen; default = the widest connected panel (the TV)
+# KIOSK_LOCKED=1             # 1 = locked --kiosk; default 0 = fullscreen at start, F11 toggles
+# PREVIEW_MAX_W=1080 PREVIEW_MAX_H=1920 PREVIEW_QUALITY=70   # /api/preview.mjpg + view.html relay size
