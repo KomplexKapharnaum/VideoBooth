@@ -226,9 +226,11 @@ def preview_jpeg(width=480):
                 m = PREVIEW['ws'].call('Page.getLayoutMetrics')          # cdp.WS.call returns the result dict
                 vp = m.get('cssVisualViewport') or m.get('visualViewport') or {}
                 PREVIEW['vw'], PREVIEW['vh'] = vp.get('clientWidth', 1920), vp.get('clientHeight', 1080)
-            scale = min(1.0, width / float(PREVIEW['vw'] or width))
-            r = PREVIEW['ws'].call('Page.captureScreenshot', format='jpeg', quality=55,
-                                   clip={'x': 0, 'y': 0, 'width': PREVIEW['vw'], 'height': PREVIEW['vh'], 'scale': scale})
+            # NO clip/scale: Chromium implements a scaled clip by overriding the page's device
+            # metrics for the capture, and the kiosk page itself renders ONE frame at that
+            # scale — the visitor screen flashed to ~25% every 500 ms while the panel was open
+            # (kxkm-ai2, 2026-09-11). Full-viewport capture, the panel's <img> does the scaling.
+            r = PREVIEW['ws'].call('Page.captureScreenshot', format='jpeg', quality=55, fromSurface=True)
             PREVIEW['last'] = base64.b64decode(r['data']); PREVIEW['at'] = time.time()
             return PREVIEW['last']
         except Exception as e:  # noqa: BLE001
