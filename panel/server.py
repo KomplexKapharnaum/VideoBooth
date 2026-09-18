@@ -273,6 +273,31 @@ CAMERA_JS = ("(function(w){var v=document.getElementById('cam');if(!v||!v.videoW
              "c.getContext('2d').drawImage(v,0,0,c.width,c.height);return c.toDataURL('image/jpeg',0.7)})(%d)")
 
 
+# On the blank (OFF) page nothing holds a camera: the preview opens one there itself, hidden, with
+# the same choice rule as output.html (cam=NDI when the source is NDI, else the first real camera).
+# The kiosk origin holds a real camera grant (setup/25_hndi.sh policy), so this needs no prompt.
+CAMERA_BOOT_JS = (
+    "(async function(want){if(document.getElementById('cam'))return 'has';"
+    "const v=document.createElement('video');v.id='cam';v.autoplay=true;v.muted=true;v.playsInline=true;"
+    "v.style.cssText='position:fixed;left:-9999px;top:0';document.body.appendChild(v);"
+    "let devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');"
+    "if(!devs.some(d=>d.label)){const p=await navigator.mediaDevices.getUserMedia({video:true,audio:false});"
+    "devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');p.getTracks().forEach(t=>t.stop());}"
+    "const pick=want?devs.find(d=>d.label.toLowerCase().includes(want.toLowerCase())):devs.find(d=>d.label&&!/\\bndi\\b/i.test(d.label));"
+    "v.srcObject=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1920},height:{ideal:1080},...(pick?{deviceId:{exact:pick.deviceId}}:{})},audio:false});"
+    "await new Promise(r=>v.onloadedmetadata=r);return 'opened '+(pick?pick.label:'default')})(%s)")
+
+
+def camera_boot():
+    """Give the current kiosk page a hidden camera element if it has none (the blank OFF page)."""
+    want = 'NDI' if current_source() == 'ndi' else ENV.get('WEBCAM_LABEL', '')
+    r = CAMERA['ws'].call('Runtime.evaluate', expression=CAMERA_BOOT_JS % json.dumps(want), awaitPromise=True, returnByValue=True)
+    res = (r.get('result') or {}).get('value') or r.get('exceptionDetails', {}).get('text') or '?'
+    if res != 'has':
+        log(f'camera preview: {res} on {cdp.page().get("url", "")[-30:]}')
+    return res
+
+
 def camera_jpeg(width=640, min_age=0.08):
     """One JPEG of the kiosk page's camera element, drawn by the page itself on an off-screen
     canvas (Runtime.evaluate → data URL). The visitor screen is untouched — this never changes
@@ -286,7 +311,12 @@ def camera_jpeg(width=640, min_age=0.08):
             r = CAMERA['ws'].call('Runtime.evaluate', expression=CAMERA_JS % int(width), returnByValue=True)
             data = (r.get('result') or {}).get('value') or ''
             if not data.startswith('data:image/jpeg;base64,'):
-                raise RuntimeError('no camera frame on the kiosk page yet')
+                if camera_boot().startswith('opened'):
+                    time.sleep(0.4)
+                    r = CAMERA['ws'].call('Runtime.evaluate', expression=CAMERA_JS % int(width), returnByValue=True)
+                    data = (r.get('result') or {}).get('value') or ''
+                if not data.startswith('data:image/jpeg;base64,'):
+                    raise RuntimeError('no camera frame on the kiosk page yet')
             CAMERA['last'] = base64.b64decode(data.split(',', 1)[1]); CAMERA['at'] = time.time()
             return CAMERA['last']
         except Exception:  # noqa: BLE001 — the page reloaded: next call reattaches
