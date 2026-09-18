@@ -8,8 +8,7 @@ set -uo pipefail
 # booth.conf only until the next cold boot. The unit's first start after boot resets it; a panel
 # restart of the kiosk (same boot) keeps the choice.
 if [ "${SOURCE:-webcam}" = ndi ] && [ ! -f "/run/user/$(id -u)/booth-kiosk.booted" ]; then
-  sed -i -E 's/^SOURCE=.*$/SOURCE="webcam"/' "$BOOTH_HOME/booth.conf" 2>/dev/null
-  sed -i -E 's/([?&])cam=NDI(&|$)/\1/' "$BOOTH_HOME/booth.conf" 2>/dev/null
+  sed -i -E 's/^SOURCE=.*$/SOURCE="webcam"/; s/&cam=NDI"/"/; s/\?cam=NDI&/?/; s/\?cam=NDI"/"/' "$BOOTH_HOME/booth.conf" 2>/dev/null
   . "$(dirname "$0")/../setup/env.sh"
 fi
 touch "/run/user/$(id -u)/booth-kiosk.booted" 2>/dev/null

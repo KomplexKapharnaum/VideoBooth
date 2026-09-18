@@ -28,7 +28,9 @@ import cdp  # noqa: E402  (DevTools client, stdlib)
 
 def sh_env():
     """setup/env.sh + booth.conf as a dict (the single place for paths and ports)."""
-    out = subprocess.run(['bash', '-c', f'. {ROOT}/setup/env.sh >/dev/null 2>&1; env'], capture_output=True, text=True).stdout
+    # set -a: env.sh and booth.conf assign without exporting — without it only HF_HOME and PATH
+    # reached this dict and every port fell back to its default (found 2026-09-18 when SOURCE never arrived)
+    out = subprocess.run(['bash', '-c', f'set -a; . {ROOT}/setup/env.sh >/dev/null 2>&1; env'], capture_output=True, text=True).stdout
     return dict(l.split('=', 1) for l in out.splitlines() if '=' in l)
 
 
@@ -42,10 +44,22 @@ SD_CONFIG = ENV.get('SD_CONFIG', os.path.join(ROOT, 'engines/b-streamdiffusion/b
 NDI_API = ENV.get('NDI_API', 'http://127.0.0.1:8791')
 
 
+def current_source():
+    """SOURCE as booth.conf holds it right now — the kiosk unit rewrites it at boot behind the panel's back."""
+    conf = os.path.join(ROOT, 'booth.conf')
+    try:
+        m = re.search(r'^SOURCE="?(webcam|ndi)"?\s*$', open(conf).read(), re.M)
+        return m.group(1) if m else ENV.get('SOURCE', 'webcam')
+    except OSError:
+        return ENV.get('SOURCE', 'webcam')
+
+
+
+
 def kiosk_b_url():
     """The Engine B page, with the camera the kiosk must open: cam=NDI for HNdi's loopback (its
     v4l2 card label), the webcam's label substring otherwise (empty = first camera)."""
-    src = ENV.get('SOURCE', 'webcam')
+    src = current_source()
     cam = 'NDI' if src == 'ndi' else ENV.get('WEBCAM_LABEL', '')
     return f"http://127.0.0.1:{ENV.get('KIOSK_HTTP_PORT', '7861')}/output.html?server={B}" + (f"&cam={urllib.parse.quote(cam)}" if cam else '')
 
@@ -486,7 +500,7 @@ def ndi_status():
 
 def source_state():
     st = ndi_status()
-    return {'source': ENV.get('SOURCE', 'webcam'), 'webcam_label': ENV.get('WEBCAM_LABEL', ''), 'ndi_api': NDI_API,
+    return {'source': current_source(), 'webcam_label': ENV.get('WEBCAM_LABEL', ''), 'ndi_api': NDI_API,
             'ndi': None if 'error' in st else {'state': st.get('state'), 'resolved': (st.get('source') or {}).get('resolved', ''),
                                                 'override': (st.get('source') or {}).get('override', ''), 'fps': st.get('fps_measured'),
                                                 'size': f"{st.get('width')}x{st.get('height')}", 'device': st.get('device'), 'readers': st.get('readers', [])}}

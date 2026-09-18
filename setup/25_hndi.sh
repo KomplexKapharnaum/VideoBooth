@@ -38,6 +38,18 @@ for k, v in (('width', 1920), ('height', 1080), ('format', 'YUY2'), ('size', 'fi
 open(p, 'w').write(s)
 print('hndi.conf:', ', '.join(l.strip() for l in s.splitlines() if re.match(r'^(width|height|size|autopick|nosignal|api_bind|receiver_name)\s*=', l)))
 PY
+# The kiosk page picks its camera by label (cam=NDI). Chromium exposes camera labels and ids only
+# to an origin whose camera permission is GRANTED; the kiosk's --auto-accept-camera-and-microphone-capture
+# answers prompts but leaves the permission at 'prompt', so enumerateDevices() stays collapsed to
+# one nameless placeholder and cam= can never match (kxkm-ai2 2026-09-18). A managed policy grants
+# the kiosk origin for real. The Chromium snap reads /etc/chromium/policies/managed (and the deb
+# /etc/chromium/policies/managed too); the JSON is harmless where nothing reads it.
+KIOSK_ORIGIN="http://127.0.0.1:${KIOSK_HTTP_PORT:-7861}"
+for d in /etc/chromium/policies/managed /etc/chromium-browser/policies/managed; do
+  mkdir -p "$d"
+  printf '{\n  "VideoCaptureAllowedUrls": ["%s"],\n  "AudioCaptureAllowedUrls": ["%s"]\n}\n' "$KIOSK_ORIGIN" "$KIOSK_ORIGIN" > "$d/videobooth-kiosk.json"
+done
+echo "kiosk camera policy: $KIOSK_ORIGIN granted (restart the kiosk to apply)"
 # the kiosk user must read the loopback (Chrome opens it like a webcam)
 id -nG "$OWNER" | grep -qw video || { usermod -aG video "$OWNER"; echo "added $OWNER to video (re-login / kiosk restart)"; }
 systemctl daemon-reload; systemctl enable -q hndi-in; systemctl restart hndi-in; sleep 4

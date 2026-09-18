@@ -45,9 +45,18 @@
     let deviceId;
     const want = q.get('cam');
     if (want) {
-      const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+      // enumerateDevices() hides labels (and collapses the list to one placeholder) until a
+      // camera stream has been granted — so open any camera first, read the labels, then pick.
+      // Without this cam= could never match and the page silently took the first camera
+      // (kxkm-ai2 2026-09-18, the NDI loopback never chosen).
+      let devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+      if (!devs.some(d => d.label)) {
+        const probe = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+        devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+        probe.getTracks().forEach(t => t.stop());
+      }
       const hit = devs.find(d => d.label.toLowerCase().includes(want.toLowerCase()));
-      if (hit) deviceId = hit.deviceId;
+      if (hit) deviceId = hit.deviceId; else log('camera "' + want + '" not found — cameras: ' + devs.map(d => d.label).join(', '));
     }
     const constraints = {video: {width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 30}, ...(deviceId ? {deviceId: {exact: deviceId}} : {})}, audio: false};
     cam.srcObject = await navigator.mediaDevices.getUserMedia(constraints);
