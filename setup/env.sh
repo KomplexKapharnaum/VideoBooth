@@ -41,6 +41,10 @@ CDP_PORT=${CDP_PORT:-9222}                        # Chrome DevTools port used by
 PANEL_PORT=7870                                # technician panel (panel/server.py), LAN, no auth
 
 export HF_HOME=$BOOTH_HF
+# A show box loads its models from the cache setup/10_engine_b.sh filled — never from the hub:
+# without this, a box on a LAN with no internet fails the load instantly ("Can't load config for
+# SimianLuo/LCM_Dreamshaper_v7", kxkm-ai2 2026-09-18 on the show network). Set 0 to fetch anew.
+export HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
 export PATH="$HOME/.local/bin:$PATH"           # uv lives there on kxkm-ai
 
 [ -f "$BOOTH_HOME/booth.conf" ] && . "$BOOTH_HOME/booth.conf"
