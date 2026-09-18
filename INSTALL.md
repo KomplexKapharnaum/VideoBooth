@@ -52,6 +52,18 @@ nmcli con modify "<dongle connection>" ipv4.never-default yes ipv6.never-default
 nmcli con modify "<onboard connection>" ipv4.route-metric 50
 ```
 
+## The NDI network link decides the stream
+
+kxkm-ai2's USB-C dongle (ASIX AX88179) runs on the `cdc_ncm` class driver: its native driver
+registers and unregisters the interface in a loop on kernel 7.0 ("Failed to read reg index 0x0040"),
+so leave the dongle in its NCM configuration — `ethtool` then reports a meaningless 100 Mb/s.
+What limits the stream is the upstream: on 2026-09-18 the NDI network reached the box through a
+100 Mb/s wireless bridge, and a 1080p30 full-quality NDI stream (~100 Mbit/s) arrived at 5–12 fps.
+Two ways out, both one click: the sender outputs 720p or 540p (45 / 25 Mbit/s), or HNdi's
+bandwidth `lowest` takes the NDI proxy stream — 640x360 at a steady 30 fps for 3 Mbit/s, which the
+booth's 512x768 generation input tolerates. The panel shows `source WxH → camera 1920x1080 · N fps
+received`: the camera stays 1080p (Chrome holds fixed caps), the source is scaled into it.
+
 ## NDI as a video source (optional)
 
 `sudo setup/25_hndi.sh` installs [HNdi](https://github.com/Hemisphere-Project/HNdi): an NDI stream
