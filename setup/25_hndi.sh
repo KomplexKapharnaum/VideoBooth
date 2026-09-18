@@ -32,8 +32,12 @@ def setk(section, key, val):
         s = re.sub(rf'^\s*{key}\s*=.*$', f'{key} = {val}', s, count=1, flags=re.M)
     else:
         s = re.sub(rf'^\[{section}\]\s*$', f'[{section}]\n{key} = {val}', s, count=1, flags=re.M)
+# a booth often takes its NDI over a wireless hop: jitter buffer, automatic fallback to the NDI
+# proxy stream on stalls, hold the last frame 4 s, reconnect only after 20 s without a frame
+# (a teardown + reconnect over a bad link costs ~30 s of slate — kxkm-ai2 2026-09-18)
 for k, v in (('width', 1920), ('height', 1080), ('format', 'YUY2'), ('size', 'fixed'), ('autopick', 'false'),
-             ('nosignal', 'slate'), ('api_bind', '0.0.0.0'), ('receiver_name', f'{host} (VideoBooth)'), ('profile', 'lowlatency')):
+             ('nosignal', 'slate'), ('api_bind', '0.0.0.0'), ('receiver_name', f'{host} (VideoBooth)'),
+             ('profile', 'robust'), ('bandwidth', 'auto'), ('hold_ms', 4000), ('dead_ms', 20000)):
     setk('input', k, v)
 open(p, 'w').write(s)
 print('hndi.conf:', ', '.join(l.strip() for l in s.splitlines() if re.match(r'^(width|height|size|autopick|nosignal|api_bind|receiver_name)\s*=', l)))
