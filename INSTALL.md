@@ -40,6 +40,18 @@ sudo /ai/VideoBooth/setup/02_root_prereqs.sh    # Chromium snap (refresh held, c
 `--no-autologin` keeps the login screen (then start the kiosk by hand from the desktop).
 Log out / in once for the `video` group.
 
+## Two networks, no internet
+
+The box runs offline: models come from the cache (`HF_HUB_OFFLINE=1`, env.sh), the kiosk page is
+served from 127.0.0.1, nothing phones home. With the onboard port on the show LAN and a USB-C
+dongle on the NDI network, the dongle's connection must never carry the default route or DNS —
+otherwise a venue DHCP silently becomes the box's "internet" and resolver. On kxkm-ai2 (2026-09-18):
+
+```sh
+nmcli con modify "<dongle connection>" ipv4.never-default yes ipv6.never-default yes ipv4.ignore-auto-dns yes ipv4.route-metric 300
+nmcli con modify "<onboard connection>" ipv4.route-metric 50
+```
+
 ## NDI as a video source (optional)
 
 `sudo setup/25_hndi.sh` installs [HNdi](https://github.com/Hemisphere-Project/HNdi): an NDI stream
