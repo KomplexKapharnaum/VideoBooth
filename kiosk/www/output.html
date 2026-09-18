@@ -57,6 +57,17 @@
       }
       const hit = devs.find(d => d.label.toLowerCase().includes(want.toLowerCase()));
       if (hit) deviceId = hit.deviceId; else log('camera "' + want + '" not found — cameras: ' + devs.map(d => d.label).join(', '));
+    } else {
+      // no camera named: the first REAL camera — never the NDI loopback, which is a camera only
+      // when asked for (cam=NDI), and which the enumeration order may well put first
+      let devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+      if (!devs.some(d => d.label)) {
+        const probe = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+        devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+        probe.getTracks().forEach(t => t.stop());
+      }
+      const real = devs.find(d => d.label && !/\bndi\b/i.test(d.label));
+      if (real) deviceId = real.deviceId;
     }
     const constraints = {video: {width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 30}, ...(deviceId ? {deviceId: {exact: deviceId}} : {})}, audio: false};
     cam.srcObject = await navigator.mediaDevices.getUserMedia(constraints);

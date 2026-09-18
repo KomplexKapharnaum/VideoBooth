@@ -53,11 +53,15 @@
     <h2 style="margin-top:14px">Video source</h2>
     <div class="row">
       <div class="seg" id="video-source"><button data-source="webcam">USB webcam</button><button data-source="ndi">NDI</button></div>
+      <button data-op="kiosk_restart" id="restart-screen" title="restart the visitor-screen browser: a replugged camera, a stuck page, a black screen — the engines keep running">⟳ RESTART SCREEN</button>
       <span class="hint" id="video-hint">—</span>
     </div>
     <div id="ndi-box" class="hide">
       <div class="row"><select id="ndi-select" style="min-width:260px"><option value="">— no NDI source —</option></select><span class="hint" id="ndi-status">HNdi: —</span></div>
       <div class="hint">Streams found on the network by HNdi. Pick one to put it on the NDI camera (a few seconds). The pick is not kept across a reboot: every boot starts on the USB webcam.</div>
+    </div>
+    <div class="hint">A USB camera plugged in after the screen started is invisible to it until RESTART SCREEN (the browser only sees the cameras it was born with). Engines are untouched; ~15 s of black.</div>
+    <div class="hide">
     </div>
     <h2 style="margin-top:14px">Show mode</h2>
     <div class="row">
