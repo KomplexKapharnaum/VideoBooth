@@ -37,12 +37,13 @@
   <span class="chip" id="c-kiosk">kiosk —</span>
   <span class="chip" id="c-show">show mode —</span>
   <span class="chip" id="c-time"></span>
+  <button id="restart-booth" class="danger" style="margin-left:auto" title="VideoBooth back to its boot state without rebooting the box: engines stopped, screen blank, NDI pick cleared, webcam source, kiosk and panel restarted — then pick the engine again">RESTART</button>
 </header>
 <main>
   <section>
     <h2>Render preview — what the visitor sees</h2>
     <img id="preview" alt="preview">
-    <div class="row"><div class="seg" id="preview-mode"><button data-mode="2" class="on">2 fps</button><button data-mode="full">full rate</button></div><span class="hint" id="preview-hint">snapshots of the kiosk browser · full rate = the browser's own screencast, relayed</span></div>
+    <div class="row"><div class="seg" id="preview-source"><button data-src="output" class="on">Output</button><button data-src="camera">Camera</button></div><div class="seg" id="preview-mode"><button data-mode="2">2 fps</button><button data-mode="full" class="on">full rate</button></div><span class="hint" id="preview-hint">—</span></div>
     <div class="row" style="align-items:flex-start"><div id="qr" style="background:#fff;padding:6px;border-radius:6px;line-height:0"></div><div style="flex:1;min-width:160px"><div class="hint">Live view for any device (no camera, no controls):</div><div id="view-links"></div></div></div>
     <h2 style="margin-top:14px">Engine on the visitor screen</h2>
     <div class="row">
@@ -132,17 +133,22 @@ let engine = 'B', dirty = {prompt:false, negative:false}, filled = false, vaceOn
 const logEl = $('#log'); const say = m => { logEl.textContent = (new Date().toLocaleTimeString() + ' ' + m + '\n' + logEl.textContent).slice(0, 4000); };
 
 // ---- preview
-let previewMode = '2', previewTimer = null;
+let previewMode = 'full', previewSource = 'output', previewTimer = null;
+const HINTS = {output: 'what the visitor sees · full rate = the browser\'s own screencast, relayed', camera: 'the raw camera the page feeds the engine (USB webcam or NDI), drawn by the page itself'};
 function setPreviewMode(m) {
   previewMode = m; document.querySelectorAll('#preview-mode button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  document.querySelectorAll('#preview-source button').forEach(b => b.classList.toggle('on', b.dataset.src === previewSource));
+  $('#preview-hint').textContent = HINTS[previewSource];
+  const base = previewSource === 'camera' ? '/api/camera' : '/api/preview';
   clearInterval(previewTimer); previewTimer = null;
-  if (m === 'full') { $('#preview').src = '/api/preview.mjpg?t=' + Date.now(); }
+  if (m === 'full') { $('#preview').src = base + '.mjpg?w=640&t=' + Date.now(); }
   else {   // snapshot mode: preload off-screen, swap only once decoded — a bare src swap blanks the <img> between loads (blink every 500 ms, 2026-09-11)
-    previewTimer = setInterval(() => { const im = new Image(); im.onload = () => { $('#preview').src = im.src; }; im.src = '/api/preview.jpg?w=520&t=' + Date.now(); }, 500);
+    previewTimer = setInterval(() => { const im = new Image(); im.onload = () => { $('#preview').src = im.src; }; im.src = base + '.jpg?w=520&t=' + Date.now(); }, 500);
   }
 }
 document.querySelectorAll('#preview-mode button').forEach(b => b.onclick = () => setPreviewMode(b.dataset.mode));
-setPreviewMode('2');
+document.querySelectorAll('#preview-source button').forEach(b => b.onclick = () => { previewSource = b.dataset.src; setPreviewMode(previewMode); });
+setPreviewMode('full');
 $('#preview').onload = e => { const i = e.target, land = i.naturalWidth > i.naturalHeight; if (i.classList.contains('landscape') !== land) i.classList.toggle('landscape', land); };
 $('#preview').onerror = () => { if (previewMode === 'full') setTimeout(() => setPreviewMode('full'), 2000); };
 // full-rate watchdog: if the stream stops delivering (kiosk restarted), reopen it
@@ -188,6 +194,14 @@ async function poll() {
 }
 const SAFETY = ['nudity','naked','nsfw','sexual','explicit','gore','blood','wounds','mutilation'];
 setInterval(poll, 2000); poll();
+
+// ---- RESTART: the whole booth back to its boot state (the panel restarts too; the poll reconnects)
+$('#restart-booth').onclick = async () => {
+  if (!confirm('Restart VideoBooth?\n\nEngines stop, the visitor screen goes black, the NDI pick is cleared, the source returns to the USB webcam. Back in about 20 s, then pick the engine again.')) return;
+  $('#restart-booth').disabled = true; say('RESTART — booth restarting…');
+  try { const r = await api('/api/ops', {action: 'booth_restart'}); say(r.result || JSON.stringify(r)); } catch (e) { say('restart: ' + e); }
+  setTimeout(() => { $('#restart-booth').disabled = false; }, 25000);
+};
 
 // ---- video source: USB webcam | NDI (HNdi's loopback camera), NDI source picker
 let ndiSources = [], ndiFilling = false;

@@ -6,6 +6,7 @@ Serves panel/www and a JSON API that drives the engines, the kiosk and the box:
   GET  /api/source            {source: webcam|ndi, ndi: HNdi state}      POST /api/source {source}
   GET  /api/ndi/sources       HNdi's source list                          POST /api/ndi/source {name} ('' = none)
   GET  /api/preview.jpg       what the visitor screen shows (DevTools screenshot of the kiosk Chromium)
+  GET  /api/camera.jpg        the raw camera the page feeds the engine (webcam or NDI); /api/camera.mjpg = ~10 fps stream
   GET  /api/presets           presets/heroes.json
   POST /api/preset/apply      {name}                      → prompt, negative, depth scale, steps/strength, seed
   POST /api/b/prompt          {prompt}                    live (prompt blending, one prompt)
@@ -15,7 +16,7 @@ Serves panel/www and a JSON API that drives the engines, the kiosk and the box:
   POST /api/a/prompt          {prompt}                    Scope session prompts
   POST /api/a/params          {noise_scale?, vace_context_scale?, vace_enabled?, denoising_step_list?, kv_cache_attention_bias?}
   POST /api/a/reset           per-visitor cache reset
-  POST /api/ops               {action: showmode_on|showmode_off|engine_b_start|engine_b_stop|engine_a_start|engine_a_stop|kiosk_restart|kiosk_b|kiosk_a}
+  POST /api/ops               {action: showmode_on|showmode_off|engine_b_start|engine_b_stop|engine_a_start|engine_a_stop|kiosk_restart|kiosk_b|kiosk_a|booth_restart}
 Runs as kxkm on kxkm-ai (systemd --user booth-panel.service), port PANEL_PORT (7870).
 """
 import base64, http.server, io, json, os, random, re, socket, socketserver, subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request, uuid
@@ -265,6 +266,34 @@ def preview_jpeg(width=480):
             raise
 
 
+# ---------------------------------------------------------------- raw camera preview (what the page feeds the engine: webcam or NDI)
+CAMERA = {'ws': None, 'last': None, 'at': 0.0, 'lock': threading.Lock()}
+CAMERA_JS = ("(function(w){var v=document.getElementById('cam');if(!v||!v.videoWidth)return '';"
+             "var c=document.createElement('canvas');var s=Math.min(1,w/v.videoWidth);c.width=Math.round(v.videoWidth*s);c.height=Math.round(v.videoHeight*s);"
+             "c.getContext('2d').drawImage(v,0,0,c.width,c.height);return c.toDataURL('image/jpeg',0.7)})(%d)")
+
+
+def camera_jpeg(width=640, min_age=0.08):
+    """One JPEG of the kiosk page's camera element, drawn by the page itself on an off-screen
+    canvas (Runtime.evaluate → data URL). The visitor screen is untouched — this never changes
+    what the page displays, unlike a screenshot clip. ~10 fps when polled continuously."""
+    with CAMERA['lock']:
+        if CAMERA['last'] and time.time() - CAMERA['at'] < min_age:
+            return CAMERA['last']
+        try:
+            if CAMERA['ws'] is None:
+                CAMERA['ws'] = cdp.WS(cdp.page()['webSocketDebuggerUrl'])
+            r = CAMERA['ws'].call('Runtime.evaluate', expression=CAMERA_JS % int(width), returnByValue=True)
+            data = (r.get('result') or {}).get('value') or ''
+            if not data.startswith('data:image/jpeg;base64,'):
+                raise RuntimeError('no camera frame on the kiosk page yet')
+            CAMERA['last'] = base64.b64decode(data.split(',', 1)[1]); CAMERA['at'] = time.time()
+            return CAMERA['last']
+        except Exception:  # noqa: BLE001 — the page reloaded: next call reattaches
+            CAMERA['ws'] = None
+            raise
+
+
 # ---------------------------------------------------------------- full-rate preview: relay the kiosk's own screencast as MJPEG
 class Screencast:
     """One DevTools screencast of the kiosk page, fanned out to every /api/preview.mjpg client.
@@ -477,6 +506,8 @@ def ops(action, arg=None):
     if action == 'engine_a_free':   # Scope keeps ~22 GB loaded after a session stop: restart it to free the GPU
         return run(f'tmux kill-session -t booth-a 2>/dev/null; sleep 2; ' + TMUX_GUARD + f'tmux new-session -d -s booth-a "{eng}/a-scope/run.sh 2>&1 | tee -a {STATE_DIR}/logs/engine_a_server.log"; echo "scope restarted (VRAM freed)"')
     if action == 'kiosk_restart': return run('systemctl --user restart --no-block booth-kiosk.service && echo "restart queued"')
+    if action == 'booth_restart':   # the RESTART button: back to the boot state — detached, it restarts this panel too
+        return run(f'systemd-run --user --quiet --unit=booth-restart-{int(time.time())} {tools}/booth_restart.sh && echo "VideoBooth restarting: engines stopped, screen blank, panel back in ~10 s"')
     if action in ('kiosk_b', 'kiosk_a', 'kiosk_off', 'kiosk_url'):
         url = {'kiosk_b': kiosk_b_url(), 'kiosk_a': KIOSK_A, 'kiosk_off': KIOSK_OFF}.get(action, arg)
         conf = os.path.join(ROOT, 'booth.conf'); txt = open(conf).read() if os.path.exists(conf) else ''
@@ -652,6 +683,31 @@ class H(http.server.SimpleHTTPRequestHandler):
             finally:
                 SCREENCAST.detach()
             return
+        if u.path == '/api/camera.mjpg':
+            self.send_response(200); self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
+            self.send_header('Cache-Control', 'no-store'); self.end_headers()
+            w = int(q.get('w', ['640'])[0]); last = None
+            try:
+                while True:
+                    try:
+                        frame = camera_jpeg(w)
+                    except Exception:  # noqa: BLE001 — no page / no camera yet: keep the stream alive
+                        time.sleep(1.0); frame = last
+                        if frame is None:
+                            continue
+                    last = frame
+                    self.wfile.write(b'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ' + str(len(frame)).encode() + b'\r\n\r\n' + frame + b'\r\n'); self.wfile.flush()
+                    time.sleep(0.1)
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+            return
+        if u.path == '/api/camera.jpg':
+            try:
+                data = camera_jpeg(int(q.get('w', ['640'])[0]))
+            except Exception as e:  # noqa: BLE001
+                return self._json({'error': f'no camera frame: {e}'}, 503)
+            self.send_response(200); self.send_header('Content-Type', 'image/jpeg'); self.send_header('Content-Length', str(len(data)))
+            self.send_header('Cache-Control', 'no-store'); self.end_headers(); self.wfile.write(data); return
         if u.path == '/api/preview.jpg':
             try:
                 data = preview_jpeg(int(q.get('w', ['480'])[0]))
