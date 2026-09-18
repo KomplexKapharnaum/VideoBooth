@@ -4,6 +4,15 @@
 # Runs inside the kxkm graphical session (systemd user unit booth-kiosk.service).
 set -uo pipefail
 . "$(dirname "$0")/../setup/env.sh"
+# Every boot starts on the USB webcam (Thomas 2026-09-18): an NDI choice made in the panel lives in
+# booth.conf only until the next cold boot. The unit's first start after boot resets it; a panel
+# restart of the kiosk (same boot) keeps the choice.
+if [ "${SOURCE:-webcam}" = ndi ] && [ ! -f "/run/user/$(id -u)/booth-kiosk.booted" ]; then
+  sed -i -E 's/^SOURCE=.*$/SOURCE="webcam"/' "$BOOTH_HOME/booth.conf" 2>/dev/null
+  sed -i -E 's/([?&])cam=NDI(&|$)/\1/' "$BOOTH_HOME/booth.conf" 2>/dev/null
+  . "$(dirname "$0")/../setup/env.sh"
+fi
+touch "/run/user/$(id -u)/booth-kiosk.booted" 2>/dev/null
 export DISPLAY=${DISPLAY:-:0}
 CHROME=$(command -v chromium || command -v chromium-browser || command -v google-chrome-stable || command -v google-chrome || true)
 [ -n "$CHROME" ] || { echo "no Chromium/Chrome (setup/02_root_prereqs.sh)"; exit 1; }

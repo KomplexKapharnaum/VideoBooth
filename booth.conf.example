@@ -1,5 +1,8 @@
 # Copy to booth.conf next to setup/ and override what differs on this machine.
 # CAMERA_DEV=/dev/video2
+# SOURCE=webcam            # kiosk video source: webcam | ndi — the panel writes this; every cold boot resets it to webcam
+# WEBCAM_LABEL=Brio        # substring of the USB camera's label (kiosk cam=); empty = first camera
+# NDI_API=http://127.0.0.1:8791
 # KIOSK_URL=http://127.0.0.1:8000
 # KIOSK_ROTATE=right
 # KIOSK_MODE=3840x2160

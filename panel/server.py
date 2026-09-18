@@ -2,7 +2,9 @@
 """VideoBooth technician panel — one small server, no dependencies, no auth (LAN only).
 
 Serves panel/www and a JSON API that drives the engines, the kiosk and the box:
-  GET  /api/status            engines (B: state/fps, A: pipeline/session), GPU, show mode, kiosk, tmux
+  GET  /api/status            engines (B: state/fps, A: pipeline/session), GPU, show mode, kiosk, tmux, video source
+  GET  /api/source            {source: webcam|ndi, ndi: HNdi state}      POST /api/source {source}
+  GET  /api/ndi/sources       HNdi's source list                          POST /api/ndi/source {name} ('' = none)
   GET  /api/preview.jpg       what the visitor screen shows (DevTools screenshot of the kiosk Chromium)
   GET  /api/presets           presets/heroes.json
   POST /api/preset/apply      {name}                      → prompt, negative, depth scale, steps/strength, seed
@@ -37,7 +39,18 @@ PORT = int(ENV.get('PANEL_PORT', '7870'))
 CDP_PORT = int(ENV.get('CDP_PORT', '9222'))
 STATE_DIR = ENV.get('BOOTH_STATE', os.path.join(ROOT, '.state'))
 SD_CONFIG = ENV.get('SD_CONFIG', os.path.join(ROOT, 'engines/b-streamdiffusion/booth_sd15_depth.yaml'))
-KIOSK_B = f"http://127.0.0.1:{ENV.get('KIOSK_HTTP_PORT', '7861')}/output.html?server={B}"
+NDI_API = ENV.get('NDI_API', 'http://127.0.0.1:8791')
+
+
+def kiosk_b_url():
+    """The Engine B page, with the camera the kiosk must open: cam=NDI for HNdi's loopback (its
+    v4l2 card label), the webcam's label substring otherwise (empty = first camera)."""
+    src = ENV.get('SOURCE', 'webcam')
+    cam = 'NDI' if src == 'ndi' else ENV.get('WEBCAM_LABEL', '')
+    return f"http://127.0.0.1:{ENV.get('KIOSK_HTTP_PORT', '7861')}/output.html?server={B}" + (f"&cam={urllib.parse.quote(cam)}" if cam else '')
+
+
+KIOSK_B = kiosk_b_url()
 KIOSK_A = f"http://127.0.0.1:{ENV.get('KIOSK_HTTP_PORT', '7861')}/scope.html?server={A}&pipeline=longlive&w=480&h=832"
 KIOSK_OFF = f"http://127.0.0.1:{ENV.get('KIOSK_HTTP_PORT', '7861')}/blank.html"
 PRESETS_REPO = os.path.join(ROOT, 'presets', 'heroes.json')          # the committed defaults
@@ -339,6 +352,7 @@ def status():
         'kiosk': {'active': kiosk_active, 'url': kiosk_url, 'ws': ws_state,
                   'engine': 'A' if kiosk_url and 'scope.html' in kiosk_url else ('OFF' if kiosk_url and 'blank.html' in kiosk_url else ('B' if kiosk_url else None))},
         'loaded_preset': LOADED_PRESET['name'],
+        'video': source_state(),
         'tmux': tmux, 'log': LOG[-12:], 'switch': {k: SWITCH[k] for k in ('running', 'target', 'step', 'error')},
     }
 
@@ -450,12 +464,51 @@ def ops(action, arg=None):
         return run(f'tmux kill-session -t booth-a 2>/dev/null; sleep 2; ' + TMUX_GUARD + f'tmux new-session -d -s booth-a "{eng}/a-scope/run.sh 2>&1 | tee -a {STATE_DIR}/logs/engine_a_server.log"; echo "scope restarted (VRAM freed)"')
     if action == 'kiosk_restart': return run('systemctl --user restart --no-block booth-kiosk.service && echo "restart queued"')
     if action in ('kiosk_b', 'kiosk_a', 'kiosk_off', 'kiosk_url'):
-        url = {'kiosk_b': KIOSK_B, 'kiosk_a': KIOSK_A, 'kiosk_off': KIOSK_OFF}.get(action, arg)
+        url = {'kiosk_b': kiosk_b_url(), 'kiosk_a': KIOSK_A, 'kiosk_off': KIOSK_OFF}.get(action, arg)
         conf = os.path.join(ROOT, 'booth.conf'); txt = open(conf).read() if os.path.exists(conf) else ''
         txt = re.sub(r'^KIOSK_URL=.*\n?', '', txt, flags=re.M).rstrip('\n') + f'\nKIOSK_URL="{url}"\n'
         open(conf, 'w').write(txt); PREVIEW['ws'] = None
         return run('systemctl --user restart --no-block booth-kiosk.service && echo "kiosk → ' + url + '"')
     return f'unknown action {action}'
+
+
+# ---------------------------------------------------------------- video source (USB webcam | NDI through HNdi)
+def _conf_set(key, value):
+    """Write KEY="value" into booth.conf (the single override file env.sh sources) and reload ENV."""
+    conf = os.path.join(ROOT, 'booth.conf'); txt = open(conf).read() if os.path.exists(conf) else ''
+    txt = re.sub(rf'^{key}=.*\n?', '', txt, flags=re.M).rstrip('\n') + f'\n{key}="{value}"\n'
+    open(conf, 'w').write(txt); ENV.update(sh_env())
+
+
+def ndi_status():
+    return try_http(NDI_API + '/status', timeout=1.5)
+
+
+def source_state():
+    st = ndi_status()
+    return {'source': ENV.get('SOURCE', 'webcam'), 'webcam_label': ENV.get('WEBCAM_LABEL', ''), 'ndi_api': NDI_API,
+            'ndi': None if 'error' in st else {'state': st.get('state'), 'resolved': (st.get('source') or {}).get('resolved', ''),
+                                                'override': (st.get('source') or {}).get('override', ''), 'fps': st.get('fps_measured'),
+                                                'size': f"{st.get('width')}x{st.get('height')}", 'device': st.get('device'), 'readers': st.get('readers', [])}}
+
+
+def set_source(src):
+    """webcam | ndi. Written to booth.conf so a kiosk restart keeps it; a cold boot starts on the
+    USB webcam again (kiosk/booth-kiosk.sh resets it on the first start after boot — Thomas
+    2026-09-18: the NDI choice must not survive a reboot)."""
+    if src not in ('webcam', 'ndi'):
+        raise ValueError('source must be webcam or ndi')
+    _conf_set('SOURCE', src)
+    r = ops('kiosk_url', kiosk_b_url())          # the kiosk page reopens with the right camera (~5 s)
+    log(f'video source → {src}')
+    return {'source': src, 'kiosk': r}
+
+
+def ndi_select(name):
+    """Put an NDI source on HNdi's device (not persisted: a reboot waits for a pick), or none."""
+    if not name:
+        return try_http(NDI_API + '/source', 'DELETE', timeout=3)
+    return try_http(NDI_API + '/source', 'PUT', {'name': name, 'persist': False, 'wait': 4}, timeout=6)
 
 
 # ---------------------------------------------------------------- engine switch (one button, all the steps)
@@ -549,6 +602,10 @@ class H(http.server.SimpleHTTPRequestHandler):
         u = urllib.parse.urlparse(self.path); q = urllib.parse.parse_qs(u.query)
         if u.path == '/api/status':
             return self._json(status())
+        if u.path == '/api/ndi/sources':
+            return self._json(try_http(NDI_API + '/sources', timeout=2))
+        if u.path == '/api/source':
+            return self._json(source_state())
         if u.path == '/api/presets':
             return self._json(presets())
         if u.path == '/api/switch/status':
@@ -605,6 +662,9 @@ class H(http.server.SimpleHTTPRequestHandler):
             elif p == '/api/a/params':     r = a_params(body)
             elif p == '/api/a/reset':      r = a_params({'reset_cache': True}); log('A reset')
             elif p == '/api/ops':          r = ops(body['action'], body.get('arg')); log(f"ops {body['action']}: {str(r)[-80:]}")
+            elif p == '/api/source':       r = set_source(body.get('source', 'webcam'))
+            elif p == '/api/ndi/source':   r = ndi_select(body.get('name', '')); log('NDI source → ' + (body.get('name') or 'none'))
+            elif p == '/api/ndi/bandwidth': r = try_http(NDI_API + '/bandwidth', 'PUT', {'mode': body.get('mode', 'highest')}, timeout=3)
             elif p == '/api/switch':       r = start_switch(body.get('engine', 'B').upper())
             elif p == '/api/presets/save': r = save_preset(body.get('name'), body.get('values', {}), body.get('mode', 'new'), body.get('notes'))
             elif p == '/api/presets/remove': r = remove_preset(body.get('name', ''))

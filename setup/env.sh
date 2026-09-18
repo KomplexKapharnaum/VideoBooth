@@ -26,6 +26,11 @@ SCOPE_PORT=8000
 CAMERA_DEV=${CAMERA_DEV:-/dev/video0}
 KIOSK_HTTP_PORT=7861                           # kiosk/www served on 127.0.0.1 by booth-kiosk.sh (the snap browser cannot read /ai)
 KIOSK_URL=${KIOSK_URL:-http://127.0.0.1:$KIOSK_HTTP_PORT/output.html?server=http://127.0.0.1:$SD_PORT}   # output-only page for Engine B; the panel rewrites it in booth.conf
+# VIDEO SOURCE of the kiosk page: webcam (default, every boot) | ndi (HNdi's /dev/video10, a camera
+# called "NDI" for Chrome). The panel switches it (booth.conf SOURCE=) and reloads the kiosk.
+SOURCE=${SOURCE:-webcam}
+WEBCAM_LABEL=${WEBCAM_LABEL:-}                 # substring of the USB camera's label for the kiosk's cam= (empty = first camera)
+NDI_API=${NDI_API:-http://127.0.0.1:8791}      # HNdi input node on this box (setup/25_hndi.sh)
 KIOSK_ROTATE=${KIOSK_ROTATE:-left}             # normal | left | right | inverted (xrandr)
 KIOSK_MODE=${KIOSK_MODE:-}                     # e.g. 3840x2160 ; empty = panel native (--auto)
 KIOSK_OUTPUT=${KIOSK_OUTPUT:-}                 # xrandr output name; empty = the connected output with the largest physical width (the TV)

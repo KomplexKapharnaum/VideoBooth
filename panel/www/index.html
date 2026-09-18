@@ -50,6 +50,15 @@
     </div>
     <div class="hint" id="switch-status">—</div>
     <div class="hint">One button does everything: stops the other engine (GPU memory), loads the pipeline, points the visitor screen at the right page. B → A takes 1–3 min, A → B about 1 min; STOP shuts both engines down and blanks the screen. The screen is black meanwhile.</div>
+    <h2 style="margin-top:14px">Video source</h2>
+    <div class="row">
+      <div class="seg" id="video-source"><button data-source="webcam">USB webcam</button><button data-source="ndi">NDI</button></div>
+      <span class="hint" id="video-hint">—</span>
+    </div>
+    <div id="ndi-box" class="hide">
+      <div class="row"><select id="ndi-select" style="min-width:260px"><option value="">— no NDI source —</option></select><span class="hint" id="ndi-status">HNdi: —</span></div>
+      <div class="hint">Streams found on the network by HNdi. Pick one to put it on the NDI camera (a few seconds). The pick is not kept across a reboot: every boot starts on the USB webcam.</div>
+    </div>
     <h2 style="margin-top:14px">Show mode</h2>
     <div class="row">
       <button data-op="showmode_on" id="show-on">Show mode ON</button>
@@ -159,7 +168,7 @@ async function poll() {
     $('#c-engine').innerHTML = s.kiosk.engine === 'OFF' ? 'kiosk <b>STOPPED</b>' : 'kiosk on <b>Engine ' + (s.kiosk.engine || '?') + '</b>';
     if (engine === 'OFF') engine = 'B';
     loadedPreset = s.loaded_preset || loadedPreset; $('#loaded-preset').textContent = loadedPreset ? '· loaded: ' + loadedPreset : ''; $('#preset-update').disabled = !loadedPreset; $('#preset-update').textContent = loadedPreset ? `Update "${loadedPreset}"` : 'Update loaded preset'; $('#preset-remove').disabled = !loadedPreset;
-    $('#c-time').textContent = s.time;
+    $('#c-time').textContent = s.time; renderVideo(s.video);
     $('#knobs-engine').textContent = 'Engine ' + engine; $('#knobs-b').classList.toggle('hide', engine !== 'B'); $('#knobs-a').classList.toggle('hide', engine !== 'A');
     $('#neg-hint').textContent = engine === 'B' ? 'Engine B: rebuilds the pipeline, ~20 s black' : 'Engine A: live';
     if (s.b.up && !filled) {       // fill the fields once from the engine's current state
@@ -175,6 +184,38 @@ async function poll() {
 }
 const SAFETY = ['nudity','naked','nsfw','sexual','explicit','gore','blood','wounds','mutilation'];
 setInterval(poll, 2000); poll();
+
+// ---- video source: USB webcam | NDI (HNdi's loopback camera), NDI source picker
+let ndiSources = [], ndiFilling = false;
+document.querySelectorAll('#video-source button').forEach(b => b.onclick = async () => {
+  b.disabled = true; say('video source → ' + b.dataset.source + ' (kiosk reloads)');
+  const r = await api('/api/source', {source: b.dataset.source}); if (!r.ok) say('source: ' + r.error);
+  b.disabled = false; poll();
+});
+$('#ndi-select').onchange = async () => {
+  const name = $('#ndi-select').value; say('NDI source → ' + (name || 'none'));
+  const r = await api('/api/ndi/source', {name}); if (!r.ok) say('NDI: ' + r.error);
+};
+function renderVideo(v) {
+  if (!v) return;
+  document.querySelectorAll('#video-source button').forEach(b => b.classList.toggle('on', b.dataset.source === v.source));
+  $('#ndi-box').classList.toggle('hide', v.source !== 'ndi');
+  const n = v.ndi;
+  $('#video-hint').textContent = v.source === 'ndi' ? (n ? `kiosk camera = NDI (${n.device} ${n.size})` : 'HNdi not running — setup/25_hndi.sh') : ('kiosk camera = USB webcam' + (v.webcam_label ? ` "${v.webcam_label}"` : ''));
+  $('#ndi-status').textContent = n ? `HNdi: ${n.state}${n.resolved ? ' · ' + n.resolved : (n.override ? ' · looking for ' + n.override : ' · no source')}${n.fps ? ' · ' + n.fps + ' fps' : ''}` : 'HNdi: unreachable';
+  const sel = $('#ndi-select'), want = n ? (n.override || '') : '';
+  if (!ndiFilling && sel.value !== want && [...sel.options].some(o => o.value === want)) sel.value = want;
+}
+async function pollNdi() {
+  try {
+    const l = await api('/api/ndi/sources'); if (!Array.isArray(l)) return;
+    const names = l.map(s => s.name); if (JSON.stringify(names) === JSON.stringify(ndiSources)) return;
+    ndiSources = names; const sel = $('#ndi-select'), cur = sel.value; ndiFilling = true;
+    sel.innerHTML = '<option value="">— no NDI source —</option>' + names.map(nm => `<option value="${nm.replace(/"/g, '&quot;')}">${nm.replace(/</g, '&lt;')}</option>`).join('');
+    if ([...sel.options].some(o => o.value === cur)) sel.value = cur; ndiFilling = false;
+  } catch (e) {}
+}
+setInterval(pollNdi, 4000); pollNdi();
 
 // ---- prompts
 $('#prompt').oninput = () => $('#prompt').classList.add('dirty'); $('#negative').oninput = () => $('#negative').classList.add('dirty');

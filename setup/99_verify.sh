@@ -10,6 +10,9 @@ M=$(cat /sys/module/nvidia/version 2>/dev/null); U=$(dpkg-query -W -f='${db:Stat
 id -nG | grep -qw video && ok "user in video group" || ko "user not in video group (setup/02_root_prereqs.sh)"
 C=$(command -v google-chrome-stable || command -v google-chrome || command -v chromium); [ -n "$C" ] && ok "browser: $C" || ko "no Chrome/Chromium"
 command -v uv >/dev/null && ok "uv" || ko "uv"
+if systemctl is-active hndi-in >/dev/null 2>&1; then
+  [ -c /dev/video10 ] && v4l2-ctl -d /dev/video10 --info 2>/dev/null | grep -q NDI && ok "HNdi: hndi-in active, /dev/video10 labelled NDI (source: ${SOURCE:-webcam})" || ko "HNdi active but /dev/video10 is not the NDI loopback"
+else warn "HNdi not installed or not running (setup/25_hndi.sh) — NDI video source unavailable"; fi
 [ -c "$CAMERA_DEV" ] && [ -r "$CAMERA_DEV" ] && ok "camera $CAMERA_DEV readable" || ko "camera $CAMERA_DEV missing or not readable"
 [ -x "$SD_DIR/.venv/bin/python" ] && "$SD_DIR/.venv/bin/python" -c "import streamdiffusion, tensorrt" 2>/dev/null && ok "engine B venv imports streamdiffusion+tensorrt" || warn "engine B not installed (setup/10_engine_b.sh)"
 CUDART_DIR=$(ls -d "$SD_DIR"/.venv/lib/python*/site-packages/nvidia/cuda_runtime/lib 2>/dev/null | head -1)

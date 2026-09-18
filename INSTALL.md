@@ -40,6 +40,16 @@ sudo /ai/VideoBooth/setup/02_root_prereqs.sh    # Chromium snap (refresh held, c
 `--no-autologin` keeps the login screen (then start the kiosk by hand from the desktop).
 Log out / in once for the `video` group.
 
+## NDI as a video source (optional)
+
+`sudo setup/25_hndi.sh` installs [HNdi](https://github.com/Hemisphere-Project/HNdi): an NDI stream
+becomes a camera called **NDI** (`/dev/video10`) that the kiosk page opens like the webcam. In the
+panel, **Video source** switches the kiosk between the USB webcam and NDI (kiosk reload, ~5 s) and
+lists the NDI streams HNdi finds — pick one to put it on the camera. HNdi's own page
+(`http://<box>:8791/`) offers the same list without the panel, and its API is what the panel calls.
+Every cold boot starts on the USB webcam; the NDI pick is never persisted. If the senders sit on
+another network than mDNS reaches, list their addresses in `[discovery] ips` of `hndi.conf`.
+
 ## 3. Camera (kxkm)
 ```bash
 tools/camera_check.sh /dev/video0               # formats + real fps; Brio: expect MJPG 1080p30
