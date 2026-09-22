@@ -1,7 +1,8 @@
 # Decision — Engine A (Scope) vs Engine B (StreamDiffusion)
 
-_Not taken yet. Filled after the Phase 2 A/B session (Brio, real people, three lighting
-setups). Score order: latency constancy, then fps, then look._
+_Taken 2026-09-21, on the 2026-09-04 bench alone — the Phase 2 A/B session (Brio, real
+people, three lighting setups) was cancelled, not run. Score order: latency constancy, then
+fps, then look._
 
 | Criterion | Engine A (Scope, LongLive + VACE) | Engine B (StreamDiffusion, SD1.5-LCM + depth CN) |
 |---|---|---|
@@ -16,11 +17,29 @@ setups). Score order: latency constancy, then fps, then look._
 
 ## Result
 
-_Preliminary, 2026-09-04, engine-side numbers only:_ **Engine B leads on the two criteria
-that come first** (latency constancy, fps) by a wide margin; Engine A's block-wise
-generation makes a constant ~1 s delay impossible at 480x832 on one 4090. The look
-criterion and pose legibility on real people under three lightings (t-009, with the Brio)
-are still open — that session decides. If it confirms B, Scope is dropped (brief §4); if
-A's coherence is judged essential, the price is a delay that wanders by up to two seconds.
+**Engine B — StreamDiffusion, SD1.5-LCM + depth ControlNet + TensorRT.** Engine A (Scope) is
+dropped for the show (brief §4).
 
-_engine: ___ · date: ___ · reasoning:_
+_On the 2026-09-04 bench, engine-side numbers only:_ **Engine B leads on the two criteria
+that come first** (latency constancy, fps) by a wide margin — 33–37 fps, 28 ms p95 frame
+interval, 0 stalls per 2 min, against Engine A's 5.7–7.0 fps delivered in ~12-frame bursts,
+1.6–1.9 s p95 interval and ~70 stalls per 2 min. Engine A's block-wise generation makes a
+constant ~1 s delay impossible at 480x832 on one 4090. Re-measured at 37.2 fps on the
+production box (kxkm-ai2) on 2026-09-11, once the CPU caps were lifted.
+
+**What this decision does NOT rest on.** The A/B session was the method for the two remaining
+criteria, and it was cancelled on 2026-09-20 rather than run:
+
+- **Pose legibility under three lightings — never measured**, on either engine. Nobody has
+  seen a real face go through either pipeline on the 55" panel.
+- **Glass-to-glass latency — never measured**, on either engine. The 0.13 s ± 0.04 above is
+  engine-side only: camera, display and compositing are not in it.
+- **The hero presets ship untuned** — `presets/heroes.json` is still the 2026-09-04 scaffold.
+
+Those three stay open by choice, not by oversight: the show is 2026-09-24 and the remaining
+days went to the physical setup instead. Read the "not measured" / "not tested" rows above as
+final for this show, not as pending work.
+
+_engine: **B** · date: **2026-09-21** · reasoning: **latency constancy, then fps, on the
+2026-09-04 bench; the A/B session that would have added look and pose legibility was
+cancelled**_
