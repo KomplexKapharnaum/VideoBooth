@@ -65,5 +65,7 @@ print("ok: torch", torch.__version__, "cuda", torch.version.cuda, "| tensorrt", 
 PYCHK
 ( cd frontend && npm i --silent && npm run build --silent )
 mkdir -p "$SD_TRT_ENGINES"
+# The depth engine is the one input the yaml names that run.sh does not build (≈ 100 MB ONNX).
+"$BOOTH_HOME/setup/11_depth_engine.sh"
 echo "OK. Start with: $BOOTH_HOME/engines/b-streamdiffusion/run.sh   (UI http://<host>:$SD_PORT)"
 echo "First start builds the TensorRT engines for the sizes in $SD_CONFIG (several minutes)."

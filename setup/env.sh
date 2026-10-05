@@ -15,6 +15,13 @@ SD_PY=3.10                                     # the fork's demo requires 3.10
 SD_TRT_ENGINES=$BOOTH_ENGINES/trt              # built TensorRT engines (size-specific)
 SD_CONFIG=$BOOTH_HOME/engines/b-streamdiffusion/booth_sd15_depth.yaml
 SD_PORT=7860
+# Depth Anything V2 small for the yaml's depth_tensorrt preprocessor (setup/11_depth_engine.sh).
+# The ONNX is the one ComfyUI-Depth-Anything-Tensorrt points at, pinned to a HuggingFace commit
+# and its sha256 (≈ 100 MB, static 1x3x518x518 input); the engine is built from it on the box.
+DEPTH_ONNX_URL=https://huggingface.co/yuvraj108c/Depth-Anything-2-Onnx/resolve/4bae4e2a0b039cec4439376322c05e1531802c2f/depth_anything_v2_vits.onnx
+DEPTH_ONNX_SHA256=b47f3b67a5fadc18dec8cfae9954544182b79b57e8beedf6051a27cd73001c77
+DEPTH_ONNX=${DEPTH_ONNX:-$BOOTH_ENGINES/onnx/depth_anything_v2_vits.onnx}
+DEPTH_ENGINE=$SD_TRT_ENGINES/depth_anything_v2_vits-fp16.engine   # = engine_path in $SD_CONFIG
 
 # Engine A — Daydream Scope
 SCOPE_REPO=https://github.com/daydreamlive/scope.git

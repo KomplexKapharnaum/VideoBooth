@@ -85,11 +85,14 @@ Set `CAMERA_DEV` in `booth.conf` if the Brio is not video0 (`v4l2-ctl --list-dev
 setup/10_engine_b.sh                            # Python 3.10 venv, torch cu128, fork + TensorRT, demo build
 engines/b-streamdiffusion/run.sh                # first run builds the TensorRT engines (minutes) → http://kxkm-ai:7860
 ```
-**Depth engine (undeclared input, 2026-09-11):** the yaml points at
-`.engines/trt/depth_anything_v2_vits-fp16.engine`, built on kxkm-ai by
-`engines/b-streamdiffusion/build_depth_engine.py` from an ONNX under kxkm-ai's `/ai/data/models`.
-On a new box either copy the `.engine` from kxkm-ai (same GPU model + TensorRT version) or fetch the
-ONNX and rebuild. Nothing installs it yet.
+**Depth engine:** the yaml points at `.engines/trt/depth_anything_v2_vits-fp16.engine`.
+`setup/10_engine_b.sh` ends with `setup/11_depth_engine.sh`, which fetches the Depth-Anything-V2-small
+ONNX (≈ 100 MB, pinned by HuggingFace commit + sha256 in `env.sh`) into `.engines/onnx/` and builds
+the engine with `engines/b-streamdiffusion/build_depth_engine.py`; `99_verify` checks it loads.
+Re-run it alone after a TensorRT upgrade (it rebuilds an engine that no longer loads), `--force` to
+rebuild anyway. Offline box: copy the `.onnx` into `.engines/onnx/`, or the `.engine` from a box with
+the same GPU + TensorRT version. (Until 2026-10 nothing installed it: kxkm-ai's was built by hand
+from an ONNX under `/ai/data/models` and copied to kxkm-ai2.)
 
 **CPU stability (kxkm-ai2, 2026-09-11):** every TensorRT build died at boost until two things were
 fixed — the CPU fan was not plugged in, and BIOS 2002 ran the i7-14700K with PL1 = PL2 = 4095 W.

@@ -19,6 +19,9 @@ CUDART_DIR=$(ls -d "$SD_DIR"/.venv/lib/python*/site-packages/nvidia/cuda_runtime
 if [ -x "$SD_DIR/.venv/bin/python" ]; then
   LD_LIBRARY_PATH="${CUDART_DIR:-/nonexistent}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$SD_DIR/.venv/bin/python" -c "import ctypes; ctypes.CDLL('libcudart.so')" 2>/dev/null \
     && ok "libcudart.so resolvable (TensorRT/polygraphy)" || ko "libcudart.so not found — run.sh links it in the venv; else apt install nvidia-cuda-toolkit"
+  D=$(LD_LIBRARY_PATH="${CUDART_DIR:-/nonexistent}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$SD_DIR/.venv/bin/python" "$BOOTH_HOME/engines/b-streamdiffusion/build_depth_engine.py" --check --out "$DEPTH_ENGINE" 2>&1)
+  r=$?; D=$(tail -n1 <<<"$D")
+  [ $r = 0 ] && ok "depth engine ${D#ok: }" || ko "depth engine: $D (setup/11_depth_engine.sh)"
 fi
 [ -d "$SCOPE_DIR/.venv" ] && ok "engine A built ($SCOPE_DIR)" || warn "engine A not installed (setup/20_engine_a.sh)"
 for p in $SD_PORT $SCOPE_PORT; do ss -tln | grep -q ":$p " && warn "port $p in use (engine running?)" || ok "port $p free"; done

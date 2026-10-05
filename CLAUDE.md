@@ -190,7 +190,8 @@ VideoBooth/
   BENCHMARKS.md           every perf measurement, dated, exact config
   DECISION.md             A vs B result and reasoning
   setup/                  idempotent scripts: 00 audit · 01 driver fix (root) ·
-                          02 prereqs (root) · 10 engine B · 20 engine A · 99 verify
+                          02 prereqs (root) · 10 engine B · 11 depth engine ·
+                          20 engine A · 99 verify
   tools/                  showmode.sh · camera_check.sh · fps_probe.py (DevTools) ·
                           cdp.py · latency test protocol
   kiosk/                  Chromium kiosk launcher + systemd user unit + portrait setup
